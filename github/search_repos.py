@@ -24,10 +24,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Search for repos on GitHub.')
     parser.add_argument('search_terms', type=str, nargs='+',
                     help='search terms in GitHub query')
-    parser.add_argument('-l', '--language', default='python', dest='language', 
+    parser.add_argument('-l', '--language', default='python', dest='language',
                         nargs=1, action='store',
                         help='language of the repo (according to GH)')
-    parser.add_argument('-p', '--pages', default=4, type=int, 
+    parser.add_argument('-p', '--pages', default=4, type=int,
                     help='how many pages of results (100 per page)')
     return vars(parser.parse_args())
 
@@ -54,14 +54,14 @@ def load_cache():
 
 def quick_save(name, query, query_url, urls, page):
     '''
-    Introduce some persistance. Save everything to a json file. This 
+    Introduce some persistance. Save everything to a json file. This
     can be replaced with a database later.
     '''
-    save = { 
-        "name":name, 
-        "query": query, 
-        "query_url":query_url, 
-        "urls":urls,  
+    save = {
+        "name":name,
+        "query": query,
+        "query_url":query_url,
+        "urls":urls,
         "page":page,
     }
 
@@ -71,12 +71,12 @@ def quick_save(name, query, query_url, urls, page):
     mode = "r+" if os.path.exists(save_file) else "w+"
     with open(save_file, mode) as f:
         content = f.read()
-        js = json.loads(content if len(content) else "[]") 
+        js = json.loads(content if len(content) else "[]")
         js.append(save)
 
     with open(bk_file, "w") as g:
         g.write(json.dumps(js, sort_keys=True, indent=4, separators=(',', ': ')))
-    
+
     shutil.copy(bk_file, SAVE_FILE)
     os.remove(bk_file)
 
@@ -90,8 +90,8 @@ def query_github(end, payload):
     if OFFLINE:
         return load_cache()
     return requests.get(GITHUB + end, auth=AUTH["github"], params=payload)
-    
-def make_code_search_request(terms, language, page):  
+
+def make_code_search_request(terms, language, page):
     '''
     Create request and endpoint to send to GitHub
     '''
@@ -106,7 +106,7 @@ def make_code_search_request(terms, language, page):
 
     }
     return end, payload
-    
+
 def extract_repo_data(repo_request_json):
     '''
     Parse through return GitHub json and extract important info
@@ -126,7 +126,7 @@ def extract_repo_data(repo_request_json):
 
 def search_repos(search_terms, language, pages):
     '''
-    Conduct searches for repositories and save the data. 
+    Conduct searches for repositories and save the data.
     '''
     for p in range(1, pages+1): # GH page from 1 not 0
         req = make_code_search_request(search_terms, language, p)
@@ -137,7 +137,7 @@ def search_repos(search_terms, language, pages):
 
         res_json = json.loads(res.text)
         repos = extract_repo_data(res_json)
-        
+
         quick_save("Test", "|".join(search_terms), res.url, repos, p)
 
 
@@ -146,5 +146,5 @@ def main(search_terms, language, pages):
         pages, language, " ".join(search_terms)))
     search_repos(search_terms, language, pages)
 
-if __name__ == "__main__":  
+if __name__ == "__main__":
     main(**parse_args())
