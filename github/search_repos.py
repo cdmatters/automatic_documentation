@@ -1,6 +1,8 @@
 #!/usr/local/bin/python3.6
 import requests
+from tqdm import tqdm
 
+import time
 import json
 import pprint
 import shutil
@@ -124,22 +126,45 @@ def extract_repo_data(repo_request_json):
         repos.append(r)
     return repos
 
+def load_fetched_pages(search_terms):
+    if not os.path.exists(SAVE_FILE):
+        return []
+    with open(SAVE_FILE, 'r+') as f:
+        saved = json.load(f)
+
+    pages = []
+    for s in saved:
+        if s['query'] == '|'.join(search_terms):
+            pages.append(s['page'])
+    return pages
+
+
 def search_repos(search_terms, language, pages):
     '''
     Conduct searches for repositories and save the data.
     '''
+    fetched_pages = load_fetched_pages(search_terms)
     for p in range(1, pages+1): # GH page from 1 not 0
+        if p in fetched_pages: # skip
+            print("Already fetched page".format(p))
+            continue
+
         req = make_code_search_request(search_terms, language, p)
         res = query_github(*req)
 
         print("Request {}: {}: RC: {}".format(p, res.url, res.status_code))
 
+        if res.status_code != 200:
+            print("Rate limited - sleeping for an hour")
+            [ time.sleep(15) for _ in tqdm(range(240)) ]
+
+            req = make_code_search_request(search_terms, language, p)
+            res = query_github(*req)
+            print("Request {}: {}: RC: {}".format(p, res.url, res.status_code))
 
         res_json = json.loads(res.text)
         repos = extract_repo_data(res_json)
-
         quick_save("Test", "|".join(search_terms), res.url, repos, p)
-
 
 def main(search_terms, language, pages):
     print("Searching GH code for {} {} pages with: {} ".format(
