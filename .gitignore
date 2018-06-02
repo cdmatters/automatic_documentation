@@ -5,3 +5,7 @@
 
 # auth
 *.key
+
+data/
+data.*
+venv/
