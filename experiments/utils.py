@@ -9,14 +9,19 @@ UNKNOWN_TOKEN = '<UNK>'
 START_OF_TEXT_TOKEN = '<START>'
 END_OF_TEXT_TOKEN = '<END>'
 
-def get_char2idx():
+def get_weights_char2idx():
+    # Weights are random, 300d
+    dim = 300
     arg_alphabet = 'abcdefghijklmnopqrstuvwyxzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_*:'
 
     char2idx = {a:i+1 for i,a in enumerate(arg_alphabet)} # ':' is a stop token
-    char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys()) 
-    return char2idx 
+    char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
+
+    char_weights =np.random.uniform(low=-0.1, high=0.1, size=[len(arg_alphabet)+1, dim]) 
+    return (char_weights, char2idx) 
 
 def get_weights_word2idx(vocab_size=100000):
+    # Currently get the 300d embeddings from GloVe
     DIR = os.path.dirname(os.path.abspath(__file__))
 
     word2idx = { PAD_TOKEN: 0 }
@@ -57,7 +62,7 @@ def tokenize_descriptions(data, word2idx, char2idx):
         desc_tok = nltk.word_tokenize(desc)
 
         d['arg_desc_tokens'] = [START_OF_TEXT_TOKEN]
-        d['arg_desc_idx'] = [word2idx[END_OF_TEXT_TOKEN]]
+        d['arg_desc_idx'] = [word2idx[START_OF_TEXT_TOKEN]]
         d['arg_desc_tokens'].extend([ w if w in word2idx else UNKNOWN_TOKEN for w in desc_tok ])
         d['arg_desc_idx'].extend([word2idx.get(t, unk_token) for t in desc_tok])
         d['arg_desc_tokens'].append(END_OF_TEXT_TOKEN)

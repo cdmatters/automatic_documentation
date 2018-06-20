@@ -1,9 +1,12 @@
 import tensorflow as tf
-from tensorflow.python.layers import core as layers_core
-
 import numpy as np
+from tqdm import tqdm
 
+from tensorflow.python.layers import core as layers_core
 from tensorflow.python import debug as tf_debug
+
+
+from  experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
 
 class BasicRNNModel(object):
@@ -15,6 +18,11 @@ class BasicRNNModel(object):
 
         self.word_weights = word_weights
         self.char_weights = char_weights
+        self.word2idx = word2idx
+        self.idx2word = dict((v,k) for k,v in word2idx.items())
+
+
+        self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.rnn_size = rnn_size
 
@@ -46,7 +54,7 @@ class BasicRNNModel(object):
                                              initializer=word_initializer, trainable=True)
             decode_embedded = tf.nn.embedding_lookup(word_embedding, input_label_sequence)
             
-            return encode_embedded, decode_embedded
+            return encode_embedded, decode_embedded, char_embedding, word_embedding
 
     @staticmethod
     def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded):  
@@ -60,25 +68,34 @@ class BasicRNNModel(object):
                                         initial_state=initial_state, time_major=False)
     
     @staticmethod
-    def _build_rnn_training_decoder(state, input_label_seq_length, rnn_size, decode_embedded, word_weights):
-        with tf.name_scope("decoder"):
-            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(rnn_size, name="RNNencoder")
-        
+    def _build_rnn_training_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
+                                    input_label_seq_length, decode_embedded):
+        with tf.name_scope("training"):        
             helper = tf.contrib.seq2seq.TrainingHelper(
                      decode_embedded, input_label_seq_length, time_major=False)
-            
-            desc_vocab_size = word_weights.shape[0]
-            projection_layer = layers_core.Dense(desc_vocab_size, use_bias=False)
             
             decoder = tf.contrib.seq2seq.BasicDecoder(
                               decoder_rnn_cell, helper, state,
                               output_layer=projection_layer)
             
-            return tf.contrib.seq2seq.dynamic_decode(decoder)
+            return tf.contrib.seq2seq.dynamic_decode(decoder, impute_finished=True)
 
     @staticmethod
-    def _build_rnn_inference_decoder(state):
-        pass
+    def _build_rnn_greedy_inference_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
+                                            start_tok, end_tok):
+        with tf.name_scope("inference"):    
+            batch_size = tf.shape(state[0])[0]  
+
+            helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_weights,
+                tf.fill([batch_size], start_tok), end_tok)
+
+            decoder = tf.contrib.seq2seq.BasicDecoder(
+                           decoder_rnn_cell, helper, state,
+                           output_layer=projection_layer)
+            
+            maximum_iterations = 300
+            return tf.contrib.seq2seq.dynamic_decode(
+                        decoder, impute_finished=True, maximum_iterations=maximum_iterations)
 
     @staticmethod
     def _get_loss(logits, input_label_sequence, input_label_seq_length):
@@ -125,30 +142,57 @@ class BasicRNNModel(object):
             input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32)
             
             # 1. Get Embeddings
-            encode_embedded, decode_embedded = self._build_encode_decode_embeddings(
+            encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
                                                     input_data_sequence, self.char_weights, 
                                                     input_label_sequence, self.word_weights)
             
             # 2. Build out Encoder
             _, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
 
-            # 3. Build out Training Decoder
-            outputs, _, _ = self._build_rnn_training_decoder(state, 
-                                            input_label_seq_length, self.rnn_size,
-                                            decode_embedded, self.word_weights)
+            # 3. Build out Training and Inference Decoder
+            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="RNNencoder")
 
-            # 4. Define Loss 
-            logits = outputs.rnn_output
-            train_loss = self._get_loss(logits, input_label_sequence, input_label_seq_length)
+            desc_vocab_size, _ = self.word_weights.shape 
+            projection_layer = layers_core.Dense(desc_vocab_size, use_bias=False)
+            
+            train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
+                                                    state,projection_layer, decoder_weights, input_label_seq_length,
+                                                    decode_embedded)
+            
+            inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
+                                                    state,projection_layer, decoder_weights,
+                                                    self.word2idx[START_OF_TEXT_TOKEN],
+                                                    self.word2idx[END_OF_TEXT_TOKEN])
+            
+            # 4. Define Train Loss 
+            train_logits = train_outputs.rnn_output
+            train_loss = self._get_loss(train_logits, input_label_sequence, input_label_seq_length)
+            train_translate = train_outputs.sample_id
 
-            # 5. Do Updates
+            # 5. Define Translation
+            inf_logits = inf_outputs.rnn_output
+            inf_translate = inf_outputs.sample_id
+            inf_loss = self._get_loss(inf_logits, input_label_sequence, input_label_seq_length)
+
+
+            # 6. Do Updates
             update = self._do_updates(train_loss, self.learning_rate)
 
-            # 6. Save Variables to Model
+            # 7. Save Variables to Model
             self.input_data_sequence = input_data_sequence
             self.input_label_sequence = input_label_sequence
             self.update = update
-            self.loss = train_loss
+            self.train_loss = train_loss
+            self.train_id = train_translate 
+
+            self.inference_loss = inf_loss
+            self.inference_id = inf_translate
+
+    def translate(self, translate_id, filter_pad=True):
+        if filter_pad:
+            translate_id = np.trim_zeros(translate_id, 'b')
+        return  " ".join([self.idx2word[i] for i in translate_id])
+        
     
     def _feed_fwd(self, session, input_data, input_labels, operation):
         """
@@ -167,50 +211,98 @@ class BasicRNNModel(object):
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 
-  
-    def _to_batch(self, arg_name, arg_desc, do_prog_bar=False):
+    def _to_batch(self, arg_name, arg_desc, epochs=1e5, do_prog_bar=False):
         assert arg_name.shape[0] == arg_desc.shape[0]
         size = arg_name.shape[0]
+        
+        batch_per_epoch = (size // self.batch_size) + 1
 
-        for i in tqdm(range((size//self.batch_size)+1), leave=do_prog_bar):
-            arg_name_batch = arg_name[i * self.batch_size: (i+1) * self.batch_size]
-            arg_desc_batch = arg_desc[i * self.batch_size: (i+1) * self.batch_size]
+        for i in tqdm(range(batch_per_epoch * epochs), disable=True):
+            idx_start = (i % batch_per_epoch) * self.batch_size
+            idx_end = ( (i % batch_per_epoch) + 1)  * self.batch_size
+
+            arg_name_batch = arg_name[idx_start: idx_end]
+            arg_desc_batch = arg_desc[idx_start: idx_end]
             yield arg_name_batch, arg_desc_batch
 
-    def train(self, session, data):
-        for _ in range(5_000):
-            # for arg_name, arg_desc in _to_batch(*data):
-            arg_name, arg_desc = data[0], data[1]
-            _, current_loss = self._feed_fwd(sess, arg_name[:2, :], arg_desc[:2, :], [self.update, self.loss])
-            print(current_loss)
-        pass
+    # def train(self, session, train_data, test_data=None):
+
+    #     i = 0
+
+    #     epochs = 5_000
+    #     arg_name, arg_desc = train_data[0], train_data[1]
+    #     for e in range(epochs):
+
+    #         # for arg_name, arg_desc in self._to_batch(*train_data):
+    #             _,  current_loss, train_id = self._feed_fwd(sess, arg_name, arg_desc, [self.update, self.train_loss, self.train_id])
+    #             if e % 100 == 0:
+    #                 inf_id = self._feed_fwd(session, arg_name, arg_desc, self.inference_id)
+    #                 for inf_t, train_t in zip(inf_id[:3], arg_desc[:3]):
+    #                     print(train_t.shape)
+    #                     print(self.translate(train_t))
+    #                     print(i, current_loss)
+    #                     print(self.translate(inf_t))
+
+
+    #                     print()
+
+
+
+    def evaluate_model(self, session, test_data, data_limit=None):
+        for test_arg_name, test_arg_desc in self._to_batch(*test_data, 1):
+            [inference_ids] = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.inference_id])
+            for test_t, true_t in zip(inference_ids[:3], test_arg_desc[:3]):
+                        print(self.translate(true_t))
+                        print("----")
+                        print(START_OF_TEXT_TOKEN + " " + self.translate(test_t))
+                        print()
+            print("------------------------------------")
+
+
+    def main(self, session, train_data, test_data=None, test_check=20):
+
+        epochs = 5_000        
+        for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
+
+                ops = [self.update, self.train_loss, self.train_id]
+                _,  train_loss, train_id = self._feed_fwd(sess, arg_name, arg_desc, ops)
+                
+                if i % test_check == 0:
+                    print("EPOCH: {}, LOSS: {}".format(i, train_loss))
+                    self.evaluate_model(sess, train_data)
+
+                if i % test_check == 0 and test_data is not None:
+                    self.evaluate_model(sess, test_data)
+
+
+
 
 
 if __name__=="__main__":
     from data.preprocessed.overfit import data as DATA
     import experiments.utils as utils
 
-    vocab_size = 20_000
+    vocab_size = 10_000
     char_seq_len = 24
-    desc_seq_len = 300
+    desc_seq_len = 150
     
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = utils.get_weights_word2idx(vocab_size)
     print("Creating char to index look up table")
-    char_weights =np.random.uniform(low=-0.1, high=0.1, size=[70, 300])
-    char2idx = utils.get_char2idx()
+    char_weights, char2idx = utils.get_weights_char2idx()
     
     print("Tokenizing the word desctiptions and characters") 
     data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
 
-    test = utils.extract_char_and_desc_idx_tensors(data, char_seq_len, desc_seq_len)
-    
+
+    test_data = utils.extract_char_and_desc_idx_tensors(data[:50], char_seq_len, desc_seq_len)
+        
     nn = BasicRNNModel(word2idx, word_weights, char_weights)
 
-    sess = tf.Session()
-
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+
+    sess = tf.Session()
     sess.run(init)
 
-    nn.train(sess, test)
+    nn.main(sess, test_data)
 
