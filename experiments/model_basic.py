@@ -8,105 +8,143 @@ from tensorflow.python import debug as tf_debug
 
 class BasicRNNModel(object):
 
-    def __init__(self, word2idx, word_weights, rnn_size=300, embed_size=300, batch_size=128,
-                 char_vocab_size=70, output_labels=6):
-        # all these args from config, to make saving model easier.
-        self.word_weights = word_weights
-
+    def __init__(self, word2idx, word_weights, char_weights, rnn_size=300, batch_size=128,
+                 learning_rate=0.001):
+        # To Do; all these args from config, to make saving model easier.
         self.name = "SimpleModel"
-        self.char_vocab_size = char_vocab_size
-        self.desc_vocab_size = self.word_weights.shape[0]
-        self.embed_size = self.word_weights.shape[1]
 
-        print(self.word_weights.shape)
-
+        self.word_weights = word_weights
+        self.char_weights = char_weights
+        self.learning_rate = learning_rate
         self.rnn_size = rnn_size
-        self.embed_size = embed_size
-        self.batch_size = batch_size
 
-        # Training Graph Variables
-
+        # Graph Variables (built later)
+        self.input_data_sequence = None
+        self.input_label_sequence = None
+        self.update = None
+        self.loss = None
+        
         self._build_train_graph()
+        
         print("Init loaded")
 
-    def _build_train_graph(self):
-       
-        with tf.name_scope("Model_{}".format(self.name)):
-
-            # input_data_sequence : [batch_size x max_variable_length]
-            input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
-            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32)
-            # input_label_sequence  : [batch_size x max_docstring_length]
-            input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
-            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32)
-            
-            batch_size = tf.shape(input_data_sequence)[0]
-            unroll_size = tf.shape(input_data_sequence)[1]
-
-            # 1. Embed Our "arg_names" character by character
-            initializer = tf.random_uniform_initializer(-0.1, 0.1)
-            char_embedding = tf.get_variable("char_embed", [self.char_vocab_size, self.embed_size],
-                                         initializer=initializer, trainable=True)
+    @staticmethod
+    def _build_encode_decode_embeddings(input_data_sequence, char_weights, 
+                                        input_label_sequence, word_weights):
+        with tf.name_scope("embed_vars"): 
+            # 1. Embed Our "arg_names" char by char
+            char_vocab_size, char_embed_size = char_weights.shape
+            char_initializer =  tf.constant_initializer(char_weights)        
+            char_embedding = tf.get_variable("char_embed", [char_vocab_size, char_embed_size],
+                                             initializer=char_initializer, trainable=True)
             encode_embedded = tf.nn.embedding_lookup(char_embedding, input_data_sequence)
-            
+                
             # 2. Embed Our "arg_desc" word by word
-            glove_initializer = tf.constant_initializer(self.word_weights)
-            word_embedding = tf.get_variable("desc_embed", [self.desc_vocab_size, self.embed_size],
-                                         initializer=glove_initializer, trainable=False)
+            desc_vocab_size, word_embed_size = word_weights.shape
+            word_initializer = tf.constant_initializer(word_weights)
+            word_embedding = tf.get_variable("desc_embed", [desc_vocab_size, word_embed_size],
+                                             initializer=word_initializer, trainable=True)
             decode_embedded = tf.nn.embedding_lookup(word_embedding, input_label_sequence)
+            
+            return encode_embedded, decode_embedded
 
-
-            # 3. Build out encoder LSTM
-            encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="LSTM_enc_"+self.name)
+    @staticmethod
+    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded):  
+        with tf.name_scope("encoder"):
+            batch_size = tf.shape(input_data_seq_length)          
+            encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(rnn_size, name="RNNencoder")
             initial_state = encoder_rnn_cell.zero_state(batch_size, dtype=tf.float32)
-           
-            _, state = tf.nn.dynamic_rnn(encoder_rnn_cell, encode_embedded,
+               
+            return tf.nn.dynamic_rnn(encoder_rnn_cell, encode_embedded,
                                         sequence_length=input_data_seq_length,
                                         initial_state=initial_state, time_major=False)
-            
-            # 4. Build out decoder LSTM
-            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="LSTM_dec_"+self.name)
-            projection_layer = layers_core.Dense(self.desc_vocab_size, use_bias=False)
-            
+    
+    @staticmethod
+    def _build_rnn_training_decoder(state, input_label_seq_length, rnn_size, decode_embedded, word_weights):
+        with tf.name_scope("decoder"):
+            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(rnn_size, name="RNNencoder")
+        
             helper = tf.contrib.seq2seq.TrainingHelper(
                      decode_embedded, input_label_seq_length, time_major=False)
+            
+            desc_vocab_size = word_weights.shape[0]
+            projection_layer = layers_core.Dense(desc_vocab_size, use_bias=False)
             
             decoder = tf.contrib.seq2seq.BasicDecoder(
                               decoder_rnn_cell, helper, state,
                               output_layer=projection_layer)
             
-            outputs, _, _ = tf.contrib.seq2seq.dynamic_decode(decoder)
-            
-            # 5. Define Loss 
-            logits = outputs.rnn_output
+            return tf.contrib.seq2seq.dynamic_decode(decoder)
 
-            self.p = tf.Print(tf.shape(logits), [tf.shape(logits)] )
+    @staticmethod
+    def _build_rnn_inference_decoder(state):
+        pass
+
+    @staticmethod
+    def _get_loss(logits, input_label_sequence, input_label_seq_length):
+        with tf.name_scope("loss"):
+            batch_size = tf.shape(input_label_sequence)[0]
             zero_col = tf.zeros([batch_size,1], dtype=tf.int32)
+
+            # Shift the decoder to be the next word, and then clip it
             decoder_outputs = tf.concat([input_label_sequence[:, 1:], zero_col], 1)  # TODO transform this
-            l = tf.reduce_max(input_label_seq_length)
-            decoder_outputs = decoder_outputs[:,:l]
+            maximum_length = tf.reduce_max(input_label_seq_length)
+            decoder_outputs = decoder_outputs[:,:maximum_length]
             
             crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                            labels=decoder_outputs, logits=logits)
 
-
             target_weights = tf.logical_not(tf.equal(decoder_outputs, tf.zeros_like(decoder_outputs)))
             target_weights = tf.cast(target_weights, tf.float32)
-            train_loss = (tf.reduce_sum(crossent * target_weights))# / batch_size)
+            train_loss = (tf.reduce_sum(crossent * target_weights)) # / batch_size)
+        return train_loss
 
-            # 6. Clip gradients
-
+    @staticmethod
+    def _do_updates(train_loss, learning_rate):
+        with tf.name_scope("opt"):
+            # Clip the gradients
             max_gradient_norm = 1
             params = tf.trainable_variables()
             gradients = tf.gradients(train_loss, params)
             clipped_gradients, _ = tf.clip_by_global_norm(
                                     gradients, max_gradient_norm)
 
-            # 7. Optimiser
-            optimizer = tf.train.AdamOptimizer(0.001)
+            # Create Optimiser and Apply Update
+            optimizer = tf.train.AdamOptimizer(learning_rate)
             update = optimizer.apply_gradients(zip(clipped_gradients, params))
+        return update
 
+    def _build_train_graph(self):
+        with tf.name_scope("Model_{}".format(self.name)):
+            # 0. Define our placeholders and derived vars
+            # # input_data_sequence : [batch_size x max_variable_length]
+            input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
+            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32)
+            # # input_label_sequence  : [batch_size x max_docstring_length]
+            input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
+            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32)
+            
+            # 1. Get Embeddings
+            encode_embedded, decode_embedded = self._build_encode_decode_embeddings(
+                                                    input_data_sequence, self.char_weights, 
+                                                    input_label_sequence, self.word_weights)
+            
+            # 2. Build out Encoder
+            _, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
 
+            # 3. Build out Training Decoder
+            outputs, _, _ = self._build_rnn_training_decoder(state, 
+                                            input_label_seq_length, self.rnn_size,
+                                            decode_embedded, self.word_weights)
+
+            # 4. Define Loss 
+            logits = outputs.rnn_output
+            train_loss = self._get_loss(logits, input_label_sequence, input_label_seq_length)
+
+            # 5. Do Updates
+            update = self._do_updates(train_loss, self.learning_rate)
+
+            # 6. Save Variables to Model
             self.input_data_sequence = input_data_sequence
             self.input_label_sequence = input_label_sequence
             self.update = update
@@ -126,7 +164,6 @@ class BasicRNNModel(object):
         run_ouputs = operation
         feed_dict = {self.input_data_sequence: input_data,
                      self.input_label_sequence: input_labels}
-
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 
@@ -154,20 +191,21 @@ if __name__=="__main__":
     import experiments.utils as utils
 
     vocab_size = 20_000
-    char_dim = 24
-    desc_dim = 300
+    char_seq_len = 24
+    desc_seq_len = 300
     
     print("Loading GloVe weights and word to index lookup table")
-    weights, word2idx = utils.get_weights_word2idx(vocab_size)
+    word_weights, word2idx = utils.get_weights_word2idx(vocab_size)
     print("Creating char to index look up table")
+    char_weights =np.random.uniform(low=-0.1, high=0.1, size=[70, 300])
     char2idx = utils.get_char2idx()
     
     print("Tokenizing the word desctiptions and characters") 
     data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
 
-    test = utils.extract_char_and_desc_idx_tensors(data, char_dim, desc_dim)
+    test = utils.extract_char_and_desc_idx_tensors(data, char_seq_len, desc_seq_len)
     
-    nn = BasicRNNModel(word2idx, weights)
+    nn = BasicRNNModel(word2idx, word_weights, char_weights)
 
     sess = tf.Session()
 
