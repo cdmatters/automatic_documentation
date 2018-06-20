@@ -1,6 +1,11 @@
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
+import numpy as np
+
+from tensorflow.python import debug as tf_debug
+
+
 class BasicRNNModel(object):
 
     def __init__(self, word2idx, word_weights, rnn_size=300, embed_size=300, batch_size=128,
@@ -13,6 +18,8 @@ class BasicRNNModel(object):
         self.desc_vocab_size = self.word_weights.shape[0]
         self.embed_size = self.word_weights.shape[1]
 
+        print(self.word_weights.shape)
+
         self.rnn_size = rnn_size
         self.embed_size = embed_size
         self.batch_size = batch_size
@@ -20,6 +27,7 @@ class BasicRNNModel(object):
         # Training Graph Variables
 
         self._build_train_graph()
+        print("Init loaded")
 
     def _build_train_graph(self):
        
@@ -27,12 +35,11 @@ class BasicRNNModel(object):
 
             # input_data_sequence : [batch_size x max_variable_length]
             input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
-            input_data_seq_length = tf.argmax(input_data_sequence, axis=1, output_type=tf.int32)
+            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32)
             # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
-            input_label_seq_length = tf.argmax(input_label_sequence, axis=1, output_type=tf.int32)
-
-
+            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32)
+            
             batch_size = tf.shape(input_data_sequence)[0]
             unroll_size = tf.shape(input_data_sequence)[1]
 
@@ -62,7 +69,7 @@ class BasicRNNModel(object):
             projection_layer = layers_core.Dense(self.desc_vocab_size, use_bias=False)
             
             helper = tf.contrib.seq2seq.TrainingHelper(
-                     decode_embedded, input_label_seq_length , time_major=False)
+                     decode_embedded, input_label_seq_length, time_major=False)
             
             decoder = tf.contrib.seq2seq.BasicDecoder(
                               decoder_rnn_cell, helper, state,
@@ -72,10 +79,16 @@ class BasicRNNModel(object):
             
             # 5. Define Loss 
             logits = outputs.rnn_output
+
+            self.p = tf.Print(tf.shape(logits), [tf.shape(logits)] )
             zero_col = tf.zeros([batch_size,1], dtype=tf.int32)
             decoder_outputs = tf.concat([input_label_sequence[:, 1:], zero_col], 1)  # TODO transform this
+            l = tf.reduce_max(input_label_seq_length)
+            decoder_outputs = decoder_outputs[:,:l]
+            
             crossent = tf.nn.sparse_softmax_cross_entropy_with_logits(
                            labels=decoder_outputs, logits=logits)
+
 
             target_weights = tf.logical_not(tf.equal(decoder_outputs, tf.zeros_like(decoder_outputs)))
             target_weights = tf.cast(target_weights, tf.float32)
@@ -128,12 +141,10 @@ class BasicRNNModel(object):
             yield arg_name_batch, arg_desc_batch
 
     def train(self, session, data):
-        for _ in range(5):
+        for _ in range(5_000):
             # for arg_name, arg_desc in _to_batch(*data):
             arg_name, arg_desc = data[0], data[1]
-            print(arg_name[0])
-            print(arg_desc[1])
-            _, current_loss = self._feed_fwd(sess, arg_name[:1, :], arg_desc[:1, :], [self.update, self.loss])
+            _, current_loss = self._feed_fwd(sess, arg_name[:2, :], arg_desc[:2, :], [self.update, self.loss])
             print(current_loss)
         pass
 
@@ -141,14 +152,25 @@ class BasicRNNModel(object):
 if __name__=="__main__":
     from data.preprocessed.overfit import data as DATA
     import experiments.utils as utils
-    weights, word2idx = utils.get_weights_word2idx(40000)
+
+    vocab_size = 20_000
+    char_dim = 24
+    desc_dim = 300
+    
+    print("Loading GloVe weights and word to index lookup table")
+    weights, word2idx = utils.get_weights_word2idx(vocab_size)
+    print("Creating char to index look up table")
     char2idx = utils.get_char2idx()
-    print(weights.shape)
+    
+    print("Tokenizing the word desctiptions and characters") 
     data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
-    test = utils.extract_char_and_desc_idx_tensors(data, 24, 100)
+
+    test = utils.extract_char_and_desc_idx_tensors(data, char_dim, desc_dim)
+    
     nn = BasicRNNModel(word2idx, weights)
 
     sess = tf.Session()
+
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
     sess.run(init)
 

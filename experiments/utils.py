@@ -12,7 +12,7 @@ END_OF_TEXT_TOKEN = '<END>'
 def get_char2idx():
     arg_alphabet = 'abcdefghijklmnopqrstuvwyxzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_*:'
 
-    char2idx = {a:i for i,a in enumerate(arg_alphabet)} # ':' is a stop token
+    char2idx = {a:i+1 for i,a in enumerate(arg_alphabet)} # ':' is a stop token
     char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys()) 
     return char2idx 
 
@@ -27,7 +27,7 @@ def get_weights_word2idx(vocab_size=100000):
 
             word = values[0]
             word_weights = np.asarray(values[1:], dtype=np.float32)  
-            word2idx[word] = i
+            word2idx[word] = i + 1
             weights.append(word_weights)
 
             if i > vocab_size:
