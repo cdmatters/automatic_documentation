@@ -6,6 +6,21 @@
 # auth
 *.key
 
+# raw data shouldnt be added to repo, but structure is useful
+data/*.md
+data/*.txt
 data/*.yaml
+data/preprocessed/*.yaml
+data/preprocessed/*.txt
+data/preprocessed/overfit/*.yaml
+data/_raw
+data/data/full
+data/data/short
+data/indexes
+
+# glove vectors
+experiments/glove/
+
 data.*
+
 venv/

@@ -1,4 +1,4 @@
-import nltk 
+import nltk
 import numpy as np
 from tqdm import tqdm
 
@@ -17,8 +17,8 @@ def get_weights_char2idx():
     char2idx = {a:i+1 for i,a in enumerate(arg_alphabet)} # ':' is a stop token
     char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
 
-    char_weights =np.random.uniform(low=-0.1, high=0.1, size=[len(arg_alphabet)+1, dim]) 
-    return (char_weights, char2idx) 
+    char_weights =np.random.uniform(low=-0.1, high=0.1, size=[len(arg_alphabet)+1, dim])
+    return (char_weights, char2idx)
 
 def get_weights_word2idx(vocab_size=100000):
     # Currently get the 300d embeddings from GloVe
@@ -31,7 +31,7 @@ def get_weights_word2idx(vocab_size=100000):
             values = line.split()
 
             word = values[0]
-            word_weights = np.asarray(values[1:], dtype=np.float32)  
+            word_weights = np.asarray(values[1:], dtype=np.float32)
             word2idx[word] = i + 1
             weights.append(word_weights)
 
@@ -67,7 +67,8 @@ def tokenize_descriptions(data, word2idx, char2idx):
         d['arg_desc_idx'].extend([word2idx.get(t, unk_token) for t in desc_tok])
         d['arg_desc_tokens'].append(END_OF_TEXT_TOKEN)
         d['arg_desc_idx'].append(word2idx[END_OF_TEXT_TOKEN])
-
+        print(d['arg_name'])
+        print(i)
         d['arg_name_tokens'] = [c for c in d['arg_name']]
         d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
         d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
@@ -90,7 +91,7 @@ if __name__ == '__main__':
     from data.preprocessed.overfit import data as DATA
 
     weights, word2idx = get_weights_word2idx()
-    char2idx = get_char2idx()
-    data = tokenize_descriptions(DATA.test, word2idx, char2idx)
+    char2idx = get_weights_char2idx()
+    data = tokenize_descriptions(DATA.train, word2idx, char2idx)
     print(data[0])
-    
+
