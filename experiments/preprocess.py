@@ -3,6 +3,9 @@ from data import preprocessed, data
 import pyaml
 import yaml
 
+from yaml import CLoader, CDumper
+from yaml.constructor import Constructor
+
 import re
 
 from tqdm import tqdm
@@ -11,6 +14,10 @@ import os
 import random
 import argparse
 
+## Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
+def add_bool(self, node):
+        return self.construct_scalar(node)
+Constructor.add_constructor(u'tag:yaml.org,2002:bool', add_bool)
 
 RAWDATADIR = os.path.dirname(os.path.abspath(data.__file__))
 PREPROCESSDATADIR = os.path.dirname(os.path.abspath(preprocessed.__file__))
@@ -49,7 +56,7 @@ def assimilate_data():
                 string = '\n'.join([_ad_hoc_clean(yaml_file, l) for l in f.readlines()])
                 data = yaml.load(string.replace(
                     "            desc: `", "            desc: \\`").replace(
-                    "            type: `", "            type: \\`"))
+                    "            type: `", "            type: \\`"), Loader=CLoader)
 
                 print("{}: {} To Update: {} ".format(i, yaml_file, len(data.keys())))
                 tot = len(all_data.keys())
@@ -72,12 +79,12 @@ def assimilate_data():
             all_files["TOTAL__"] = {"funcs":tot_f, "args":tot_args}
             f.write(pyaml.dump(all_files))
         with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "w") as f:
-            f.write(yaml.dump(all_data))
+            f.write(yaml.dump(all_data, Dumper=CDumper))
 
     for t in types:
         print("Assimilated, now test loading...")
         with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "r", encoding='utf-8') as f:
-            data = yaml.load(f)
+            data = yaml.load(f, Loader=CLoader)
             print("loaded {}: {} records".format(t, len(data)))
     return all_files
 
@@ -105,7 +112,7 @@ def map_yaml_to_arg_list(yaml_object):
 
 def prep_main_set(test_percentage):
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
-        data = yaml.load(f)
+        data = yaml.load(f, Loader=CLoader)
 
     main_data = map_yaml_to_arg_list(data)
     random.shuffle(main_data)
@@ -116,14 +123,14 @@ def prep_main_set(test_percentage):
     train = main_data[int(n * test_percentage):]
 
     with open(PREPROCESSDATADIR+"/main_train.yaml", 'w') as f:
-        f.write(yaml.dump(train))
+        f.write(yaml.dump(train, Dumper=CDumper))
     with open(PREPROCESSDATADIR+"/main_test.yaml", 'w') as f:
-        f.write(yaml.dump(test))
+        f.write(yaml.dump(test, Dumper=CDumper))
 
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
-        data = yaml.load(f)
+        data = yaml.load(f, Loader=CLoader)
 
     overfit_set = {}
     for k,v in data.items():
@@ -139,9 +146,9 @@ def prep_overfit_set(test_percentage):
     train = overfit_data[int(n * test_percentage):]
 
     with open(PREPROCESSDATADIR+"/overfit/train.yaml", 'w') as f:
-        f.write(yaml.dump(train))
+        f.write(yaml.dump(train, Dumper=CDumper))
     with open(PREPROCESSDATADIR+"/overfit/test.yaml", 'w') as f:
-        f.write(yaml.dump(test))
+        f.write(yaml.dump(test, Dumper=CDumper))
 
 def build_argparser():
     parser = argparse.ArgumentParser(description='Preprocess your raw Bonaparte data into formats that can be used')
@@ -160,14 +167,14 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.run_all:
         assimilate_data()
-        prep_main_set(0.3)
-        prep_overfit_set(0.3)
+        prep_main_set(0.25)
+        prep_overfit_set(0.25)
     else:
         if args.assimilate:
             assimilate_data()
         if args.data_set:
-            prep_main_set(0.3)
+            prep_main_set(0.25)
         if args.overfit_set:
-            prep_overfit_set(0.3)
+            prep_overfit_set(0.25)
     if not any(vars(args).values()):
         parser.print_help()

@@ -67,8 +67,6 @@ def tokenize_descriptions(data, word2idx, char2idx):
         d['arg_desc_idx'].extend([word2idx.get(t, unk_token) for t in desc_tok])
         d['arg_desc_tokens'].append(END_OF_TEXT_TOKEN)
         d['arg_desc_idx'].append(word2idx[END_OF_TEXT_TOKEN])
-        print(d['arg_name'])
-        print(i)
         d['arg_name_tokens'] = [c for c in d['arg_name']]
         d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
         d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
@@ -91,7 +89,7 @@ if __name__ == '__main__':
     from data.preprocessed.overfit import data as DATA
 
     weights, word2idx = get_weights_word2idx()
-    char2idx = get_weights_char2idx()
-    data = tokenize_descriptions(DATA.train, word2idx, char2idx)
+    char_weights, char2idx = get_weights_char2idx()
+    data = tokenize_descriptions(DATA.test, word2idx, char2idx)
     print(data[0])
 
