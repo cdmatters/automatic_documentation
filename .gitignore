@@ -6,6 +6,6 @@
 # auth
 *.key
 
-data/
+data/*.yaml
 data.*
 venv/

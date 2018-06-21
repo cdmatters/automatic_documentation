@@ -225,33 +225,11 @@ class BasicRNNModel(object):
             arg_desc_batch = arg_desc[idx_start: idx_end]
             yield arg_name_batch, arg_desc_batch
 
-    # def train(self, session, train_data, test_data=None):
 
-    #     i = 0
-
-    #     epochs = 5_000
-    #     arg_name, arg_desc = train_data[0], train_data[1]
-    #     for e in range(epochs):
-
-    #         # for arg_name, arg_desc in self._to_batch(*train_data):
-    #             _,  current_loss, train_id = self._feed_fwd(sess, arg_name, arg_desc, [self.update, self.train_loss, self.train_id])
-    #             if e % 100 == 0:
-    #                 inf_id = self._feed_fwd(session, arg_name, arg_desc, self.inference_id)
-    #                 for inf_t, train_t in zip(inf_id[:3], arg_desc[:3]):
-    #                     print(train_t.shape)
-    #                     print(self.translate(train_t))
-    #                     print(i, current_loss)
-    #                     print(self.translate(inf_t))
-
-
-    #                     print()
-
-
-
-    def evaluate_model(self, session, test_data, data_limit=None):
-        for test_arg_name, test_arg_desc in self._to_batch(*test_data, 1):
+    def evaluate_model(self, session, test_data, data_limit=-1):
+        for test_arg_name, test_arg_desc in self._to_batch(test_data[0][:data_limit], test_data[1][:data_limit], 1):
             [inference_ids] = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.inference_id])
-            for test_t, true_t in zip(inference_ids[:3], test_arg_desc[:3]):
+            for test_t, true_t in zip(inference_ids[:5], test_arg_desc[:5]):
                         print(self.translate(true_t))
                         print("----")
                         print(START_OF_TEXT_TOKEN + " " + self.translate(test_t))
@@ -268,9 +246,9 @@ class BasicRNNModel(object):
                 _,  train_loss, train_id = self._feed_fwd(sess, arg_name, arg_desc, ops)
                 
                 if i % test_check == 0:
+                    self.evaluate_model(sess, train_data, 50)
                     print("EPOCH: {}, LOSS: {}".format(i, train_loss))
-                    self.evaluate_model(sess, train_data)
-
+                    
                 if i % test_check == 0 and test_data is not None:
                     self.evaluate_model(sess, test_data)
 
@@ -295,13 +273,17 @@ if __name__=="__main__":
     data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
 
 
-    test_data = utils.extract_char_and_desc_idx_tensors(data[:50], char_seq_len, desc_seq_len)
+    test_data = utils.extract_char_and_desc_idx_tensors(data, char_seq_len, desc_seq_len)
         
     nn = BasicRNNModel(word2idx, word_weights, char_weights)
 
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
-    sess = tf.Session()
+    session_conf = tf.ConfigProto(
+      intra_op_parallelism_threads=1,
+      inter_op_parallelism_threads=1)
+    sess = tf.Session(config=session_conf)
+    # sess = tf.Session()
     sess.run(init)
 
     nn.main(sess, test_data)
