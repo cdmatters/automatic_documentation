@@ -6,6 +6,9 @@
 # auth
 *.key
 
+# logfiles
+*.log
+
 # raw data shouldnt be added to repo, but structure is useful
 data/*.md
 data/*.txt

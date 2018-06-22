@@ -5,20 +5,11 @@ from tqdm import tqdm
 from tensorflow.python.layers import core as layers_core
 from tensorflow.python import debug as tf_debug
 
-from  experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, \
+from external.nmt import bleu
+from experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
 import argparse
-
-SUMMARY_STRING = '''
---------------------------------------------
-MODEL: {classname}
-Name: {name}
---------------------------------------------
---------------------------------------------
-{summary}
---------------------------------------------
-'''
 
 EXPERIMENT_SUMMARY_STRING = '''
 --------------------------------------------
@@ -28,13 +19,16 @@ DATA: vocab_size: {voc}, char_seq: {char},
 --------------------------------------------
 {model}
 --------------------------------------------
+--------------------------------------------
 '''
 
 
 class BasicRNNModel(object):
 
-    def __init__(self, word2idx, word_weights, char2idx, char_weights, rnn_size=300, batch_size=128,
-                 learning_rate=0.001, name="BasicModel"):
+    summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
+
+    def __init__(self, word2idx, word_weights, char2idx, char_weights, 
+                 rnn_size=300, batch_size=128, learning_rate=0.001, name="BasicModel"):
         # To Do; all these args from config, to make saving model easier.
         self.name = name
 
@@ -64,13 +58,14 @@ class BasicRNNModel(object):
     def arg_summary(self):
         mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
             self.rnn_size, self.learning_rate, self.batch_size)
+        
         data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, ".format(
             len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1])
         return "\n".join([mod_args, data_args])
 
     def __str__(self):
-        return SUMMARY_STRING.format(name=self.name, classname=self.__class__.__name__,
-                                     summary=self.arg_summary())
+        return self.__class__.summary_string.format(
+                name=self.name, classname=self.__class__.__name__, summary=self.arg_summary())
 
     @staticmethod
     def _build_encode_decode_embeddings(input_data_sequence, char_weights,
@@ -87,7 +82,7 @@ class BasicRNNModel(object):
             desc_vocab_size, word_embed_size = word_weights.shape
             word_initializer = tf.constant_initializer(word_weights)
             word_embedding = tf.get_variable("desc_embed", [desc_vocab_size, word_embed_size],
-                                             initializer=word_initializer, trainable=True)
+                                             initializer=word_initializer, trainable=False)
             decode_embedded = tf.nn.embedding_lookup(word_embedding, input_label_sequence)
 
             return encode_embedded, decode_embedded, char_embedding, word_embedding
@@ -224,10 +219,16 @@ class BasicRNNModel(object):
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
 
-    def translate(self, translate_id, filter_pad=True):
+    def translate(self, translate_id, filter_pad=True, lookup=None, do_join=True):
+        if lookup is None:
+            lookup = self.idx2word
         if filter_pad:
             translate_id = np.trim_zeros(translate_id, 'b')
-        return  " ".join([self.idx2word[i] for i in translate_id])
+        
+        if do_join:
+            return  " ".join([lookup[i] for i in translate_id])
+        else:
+            return [lookup[i] for i in translate_id]
 
 
     def _feed_fwd(self, session, input_data, input_labels, operation):
@@ -253,6 +254,10 @@ class BasicRNNModel(object):
 
         batch_per_epoch = (size // self.batch_size) + 1
 
+        np.random.shuffle(arg_name)
+        np.random.shuffle(arg_desc)
+
+
         for i in tqdm(range(batch_per_epoch * epochs), disable=True):
             idx_start = (i % batch_per_epoch) * self.batch_size
             idx_end = ( (i % batch_per_epoch) + 1)  * self.batch_size
@@ -261,28 +266,44 @@ class BasicRNNModel(object):
             arg_desc_batch = arg_desc[idx_start: idx_end]
             yield arg_name_batch, arg_desc_batch
 
-    def evaluate_model(self, session, test_data, data_limit, do_test_dump=True):
+    def evaluate_model(self, session, test_data, data_limit, test_translate=0):
+        all_translations = []
+        all_references = []
         for test_arg_name, test_arg_desc in self._to_batch(test_data[0][:data_limit], test_data[1][:data_limit], 1):
-            [inference_ids] = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.inference_id])
-            for test_t, true_t in zip(inference_ids[:5], test_arg_desc[:5]):
-                        print(self.translate(true_t))
-                        print("----")
-                        print(START_OF_TEXT_TOKEN + " " + self.translate(test_t))
-                        print()
-            print("------------------------------------")
+            inference_ids = self._feed_fwd(session, test_arg_name, test_arg_desc, self.inference_id)
+            
+            translations = [self.translate(i, do_join=False) for i in inference_ids]
+            reference = [self.translate(i, do_join=False) for i in test_arg_desc]
 
-    def dump_test(self, session, data, dump_no):
-        arg_names, arg_desc = train_data
+            all_translations.extend(translations)
+            all_references.extend(reference)
 
-        ops = [self.inference_id]
-        [inferences] = self._feed_fwd(session, arg_name[:dump_no], arg_desc[:dump_no], ops)
+        bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=False)
+        bleu_score, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
 
-        for i in range(dump_no):
-            pass
+        sample_translations = self.sample_translation(session, test_data, test_translate)
 
+        return bleu_score * 100, sample_translations
 
+    def sample_translation(self, session, data, translation_count):
+        arg_names, arg_descs = data
+        if translation_count <= 0 :
+            return ""
+        else:
+            ops = [self.inference_id]
+            [inference_ids] = self._feed_fwd(session, arg_names[:translation_count], arg_descs[:translation_count], ops)
 
-    def main(self, session, epochs, train_data, test_data=None, test_check=20, do_test_dump=False):
+            results = []
+            for i in range(translation_count):
+                arg_name = self.translate(arg_names[i], lookup=self.idx2char).replace(" ","")
+                arg_desc = self.translate(arg_descs[i])
+                inference_desc = START_OF_TEXT_TOKEN + " " + self.translate(inference_ids[i])
+    
+                string = "----\nARGN: {}DESC: {}\nINFR: {}".format(arg_name, arg_desc, inference_desc)
+                results.append(string)
+            return "\n".join(results)
+
+    def main(self, session, epochs, train_data, test_data=None, test_check=20, test_translate=0):
 
         for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
 
@@ -290,16 +311,19 @@ class BasicRNNModel(object):
                 _,  train_loss, train_id = self._feed_fwd(session, arg_name, arg_desc, ops)
 
                 if i % test_check == 0:
-                    self.evaluate_model(session, train_data, 50, do_test_dump)
-                    print("EPOCH: {}, LOSS: {}".format(i, train_loss))
+                    
 
-                if i % test_check == 0 and test_data is not None:
-                    self.evaluate_model(session, test_data, 50, do_test_dump)
-
-
-
-
-
+                    train_bleu, train_trans = self.evaluate_model(session, train_data, 1000, test_translate)
+                    if test_data is not None:
+                        test_bleu, test_trans = self.evaluate_model(session, test_data, 1000, test_translate)
+                    print("---------------------------------------------")
+                    
+                    print("TRAINING: {}".format(train_bleu))
+                    print(train_trans)
+                    print("TEST: {}".format(test_bleu))
+                    print(test_trans)
+                    print('---------')
+                    print("EPOCH: {}, LOSS: {}, TRAIN_BLEU: {}, TEST_BLEU: {}".format(i, train_loss, train_bleu, test_bleu))
 
 def _build_argparser():
     parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
@@ -327,8 +351,8 @@ def _build_argparser():
     parser.add_argument('--test-freq', '-t', dest='test_freq', action='store',
                         type=int, default=100,
                         help='how often to run a test and dump output')
-    parser.add_argument('--do-dump', '-D', dest='do_test_dump', action='store_true',
-                        default=False,
+    parser.add_argument('--dump-translation', '-D', dest='test_translate', action='store',
+                        type=int, default=5,
                         help='dump extensive test information on each test batch')
     parser.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
                         default=False,
@@ -336,7 +360,7 @@ def _build_argparser():
     return parser
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
-                    test_freq, use_full_dataset, do_test_dump, epochs):
+                    test_freq, use_full_dataset, test_translate, epochs):
     if use_full_dataset:
         from data.preprocessed import data as DATA
     else:
@@ -352,7 +376,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     print("Tokenizing the word desctiptions and characters")
     train_data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
     test_data = utils.tokenize_descriptions(DATA.test, word2idx, char2idx)
-    print("Extracting tensors train")
+    print("Extracting tensors train and test")
     train_data = utils.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
     test_data = utils.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
 
@@ -373,7 +397,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     sess = tf.Session(config=session_conf)
     sess.run(init)
 
-    nn.main(sess, epochs, train_data, test_data, test_check=test_freq, do_test_dump=do_test_dump)
+    nn.main(sess, epochs, train_data, test_data, test_check=test_freq, test_translate=test_translate)
 
 
 
