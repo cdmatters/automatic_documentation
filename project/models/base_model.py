@@ -1,15 +1,16 @@
-import tensorflow as tf
-import numpy as np
-from tqdm import tqdm
+import argparse
+import sys
 
+import numpy as np
+import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 from tensorflow.python import debug as tf_debug
+from tqdm import tqdm
 
-from external.nmt import bleu
-from experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, \
+from project.external.nmt import bleu
+from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
-import argparse
 
 EXPERIMENT_SUMMARY_STRING = '''
 --------------------------------------------
@@ -299,7 +300,7 @@ class BasicRNNModel(object):
                 arg_desc = self.translate(arg_descs[i])
                 inference_desc = START_OF_TEXT_TOKEN + " " + self.translate(inference_ids[i])
     
-                string = "----\nARGN: {}DESC: {}\nINFR: {}".format(arg_name, arg_desc, inference_desc)
+                string = "----\nARGN: {}\nDESC: {}\nINFR: {}".format(arg_name, arg_desc, inference_desc)
                 results.append(string)
             return "\n".join(results)
 
@@ -320,10 +321,15 @@ class BasicRNNModel(object):
                     
                     print("TRAINING: {}".format(train_bleu))
                     print(train_trans)
+                    print('--------------------')
+
                     print("TEST: {}".format(test_bleu))
                     print(test_trans)
-                    print('---------')
+                    print('--------------------')
                     print("EPOCH: {}, LOSS: {}, TRAIN_BLEU: {}, TEST_BLEU: {}".format(i, train_loss, train_bleu, test_bleu))
+                    sys.stdout.flush() # remove when adding a logger
+
+
 
 def _build_argparser():
     parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
@@ -340,13 +346,13 @@ def _build_argparser():
                         type=int, default=5000,
                         help='minibatch size for model')
     parser.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                        type=int, default=10000,
+                        type=int, default=100000,
                         help='size of embedding vocab')
     parser.add_argument('--char-seq', '-c', dest='char_seq', action='store',
                         type=int, default=24,
                         help='max char sequence length')
     parser.add_argument('--desc-seq', '-d', dest='desc_seq', action='store',
-                        type=int, default=150,
+                        type=int, default=120,
                         help='max desecription sequence length')
     parser.add_argument('--test-freq', '-t', dest='test_freq', action='store',
                         type=int, default=100,
@@ -362,23 +368,23 @@ def _build_argparser():
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, test_translate, epochs):
     if use_full_dataset:
-        from data.preprocessed import data as DATA
+        from project.data.preprocessed import data as DATA
     else:
-        from data.preprocessed.overfit import data as DATA
+        from project.data.preprocessed.overfit import data as DATA
 
-    import experiments.utils as utils
+    import project.utils.tokenize as tokenize
 
     print("Loading GloVe weights and word to index lookup table")
-    word_weights, word2idx = utils.get_weights_word2idx(vocab_size)
+    word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
     print("Creating char to index look up table")
-    char_weights, char2idx = utils.get_weights_char2idx()
+    char_weights, char2idx = tokenize.get_weights_char2idx()
 
     print("Tokenizing the word desctiptions and characters")
-    train_data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
-    test_data = utils.tokenize_descriptions(DATA.test, word2idx, char2idx)
+    train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
+    test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
     print("Extracting tensors train and test")
-    train_data = utils.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
-    test_data = utils.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+    train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
+    test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
 
     nn = BasicRNNModel(word2idx, word_weights, char2idx, char_weights,
                         lstm_size, batch_size, lr)
@@ -398,9 +404,6 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     sess.run(init)
 
     nn.main(sess, epochs, train_data, test_data, test_check=test_freq, test_translate=test_translate)
-
-
-
 
 
 if __name__=="__main__":

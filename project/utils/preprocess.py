@@ -1,18 +1,16 @@
-from data import preprocessed, data
+import argparse
+import os
+import random
+import re
 
 import pyaml
 import yaml
-
 from yaml import CLoader, CDumper
 from yaml.constructor import Constructor
-
-import re
-
 from tqdm import tqdm
 
-import os
-import random
-import argparse
+from project.data import preprocessed, data
+
 
 ## Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
 def add_bool(self, node):

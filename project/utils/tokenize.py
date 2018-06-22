@@ -1,8 +1,9 @@
+import os
+
 import nltk
 import numpy as np
 from tqdm import tqdm
 
-import os
 
 PAD_TOKEN = '<PAD>'
 UNKNOWN_TOKEN = '<UNK>'
@@ -86,7 +87,7 @@ def extract_char_and_desc_idx_tensors(data, char_dim, desc_dim):
     return np.stack(chars), np.stack(descs)
 
 if __name__ == '__main__':
-    from data.preprocessed.overfit import data as DATA
+    from project.data.preprocessed.overfit import data as DATA
 
     weights, word2idx = get_weights_word2idx()
     char_weights, char2idx = get_weights_char2idx()

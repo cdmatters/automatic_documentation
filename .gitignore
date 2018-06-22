@@ -8,22 +8,23 @@
 
 # logfiles
 *.log
+*.zip
 
 # raw data shouldnt be added to repo, but structure is useful
-data/*.md
-data/*.txt
-data/*.yaml
-data/preprocessed/*.yaml
-data/preprocessed/*.txt
-data/preprocessed/overfit/*.yaml
-data/_raw
-data/data/full
-data/data/short
-data/indexes
+project/data/*.md
+project/data/*.txt
+project/data/*.yaml
+project/data/preprocessed/*.yaml
+project/data/preprocessed/*.txt
+project/data/preprocessed/overfit/*.yaml
+project/data/_raw
+project/data/data/full
+project/data/data/short
+project/data/indexes
 
 # glove vectors
-experiments/glove/
+project/utils/glove/
 
-data.*
+project/data.*
 
 venv/
