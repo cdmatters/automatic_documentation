@@ -103,11 +103,16 @@ class BasicRNNModel(object):
     def _build_rnn_training_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
                                     input_label_seq_length, decode_embedded):
         with tf.name_scope("training"):
+            batch_size = tf.shape(state[0])[0]
+            
             helper = tf.contrib.seq2seq.TrainingHelper(
                      decode_embedded, input_label_seq_length, time_major=False)
+            
+            decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+                cell_state=state)
 
             decoder = tf.contrib.seq2seq.BasicDecoder(
-                              decoder_rnn_cell, helper, state,
+                              decoder_rnn_cell, helper, decoder_initial_state,
                               output_layer=projection_layer)
 
             return tf.contrib.seq2seq.dynamic_decode(decoder, impute_finished=True)
@@ -120,9 +125,12 @@ class BasicRNNModel(object):
 
             helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_weights,
                 tf.fill([batch_size], start_tok), end_tok)
+            
+            decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+                cell_state=state)
 
             decoder = tf.contrib.seq2seq.BasicDecoder(
-                           decoder_rnn_cell, helper, state,
+                           decoder_rnn_cell, helper, decoder_initial_state,
                            output_layer=projection_layer)
 
             maximum_iterations = 300
@@ -179,14 +187,23 @@ class BasicRNNModel(object):
                                                     input_label_sequence, self.word_weights)
 
             # 2. Build out Encoder
-            _, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
+            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
 
-            # 3. Build out Training and Inference Decoder
+            # 3. Build out Cell ith attention
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(desc_vocab_size, use_bias=False)
 
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                self.rnn_size, encoder_outputs,
+                memory_sequence_length=input_data_seq_length)
+            
+            decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+                decoder_rnn_cell, attention_mechanism,
+                attention_layer_size=self.rnn_size)
+
+            # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
                                                     state,projection_layer, decoder_weights, input_label_seq_length,
                                                     decode_embedded)
@@ -195,22 +212,23 @@ class BasicRNNModel(object):
                                                     state,projection_layer, decoder_weights,
                                                     self.word2idx[START_OF_TEXT_TOKEN],
                                                     self.word2idx[END_OF_TEXT_TOKEN])
+            
 
-            # 4. Define Train Loss
+            # 5. Define Train Loss
             train_logits = train_outputs.rnn_output
             train_loss = self._get_loss(train_logits, input_label_sequence, input_label_seq_length)
             train_translate = train_outputs.sample_id
-
-            # 5. Define Translation
+            
+            # 6. Define Translation
             inf_logits = inf_outputs.rnn_output
             inf_translate = inf_outputs.sample_id
             inf_loss = self._get_loss(inf_logits, input_label_sequence, input_label_seq_length)
 
 
-            # 6. Do Updates
+            # 7. Do Updates
             update = self._do_updates(train_loss, self.learning_rate)
 
-            # 7. Save Variables to Model
+            # 8. Save Variables to Model
             self.input_data_sequence = input_data_sequence
             self.input_label_sequence = input_label_sequence
             self.update = update
@@ -255,9 +273,9 @@ class BasicRNNModel(object):
 
         batch_per_epoch = (size // self.batch_size) + 1
 
-        np.random.shuffle(arg_name)
-        np.random.shuffle(arg_desc)
-
+        zipped = list(zip(arg_name, arg_desc))
+        np.random.shuffle(zipped)
+        arg_name, arg_desc = zip(*zipped)
 
         for i in tqdm(range(batch_per_epoch * epochs), disable=True):
             idx_start = (i % batch_per_epoch) * self.batch_size
@@ -270,9 +288,11 @@ class BasicRNNModel(object):
     def evaluate_model(self, session, test_data, data_limit, test_translate=0):
         all_translations = []
         all_references = []
+        all_training_loss = 0
         for test_arg_name, test_arg_desc in self._to_batch(test_data[0][:data_limit], test_data[1][:data_limit], 1):
-            inference_ids = self._feed_fwd(session, test_arg_name, test_arg_desc, self.inference_id)
-            
+            train_loss, inference_ids = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.train_loss, self.inference_id])
+            all_training_loss += train_loss
+
             translations = [self.translate(i, do_join=False) for i in inference_ids]
             reference = [self.translate(i, do_join=False) for i in test_arg_desc]
 
@@ -284,7 +304,7 @@ class BasicRNNModel(object):
 
         sample_translations = self.sample_translation(session, test_data, test_translate)
 
-        return bleu_score * 100, sample_translations
+        return bleu_score * 100, sample_translations, all_training_loss
 
     def sample_translation(self, session, data, translation_count):
         arg_names, arg_descs = data
@@ -309,14 +329,14 @@ class BasicRNNModel(object):
         for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
 
                 ops = [self.update, self.train_loss, self.train_id]
-                _,  train_loss, train_id = self._feed_fwd(session, arg_name, arg_desc, ops)
+                _,  _, train_id = self._feed_fwd(session, arg_name, arg_desc, ops)
 
                 if i % test_check == 0:
                     
 
-                    train_bleu, train_trans = self.evaluate_model(session, train_data, 1000, test_translate)
+                    train_bleu, train_trans, train_loss = self.evaluate_model(session, train_data, 1000, test_translate)
                     if test_data is not None:
-                        test_bleu, test_trans = self.evaluate_model(session, test_data, 1000, test_translate)
+                        test_bleu, test_trans, test_loss = self.evaluate_model(session, test_data, 1000, test_translate)
                     print("---------------------------------------------")
                     
                     print("TRAINING: {}".format(train_bleu))
@@ -326,7 +346,8 @@ class BasicRNNModel(object):
                     print("TEST: {}".format(test_bleu))
                     print(test_trans)
                     print('--------------------')
-                    print("EPOCH: {}, LOSS: {}, TRAIN_BLEU: {}, TEST_BLEU: {}".format(i, train_loss, train_bleu, test_bleu))
+                    print("MINIBATCHES: {}, TRAIN_LOSS: {}, TRAIN_BLEU: {}, TEST_LOSS: {}, TEST_BLEU: {}".format(
+                        i, train_loss, train_bleu, test_loss, test_bleu))
                     sys.stdout.flush() # remove when adding a logger
 
 
@@ -346,7 +367,7 @@ def _build_argparser():
                         type=int, default=5000,
                         help='minibatch size for model')
     parser.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                        type=int, default=100000,
+                        type=int, default=50000,
                         help='size of embedding vocab')
     parser.add_argument('--char-seq', '-c', dest='char_seq', action='store',
                         type=int, default=24,
