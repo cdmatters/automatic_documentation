@@ -150,7 +150,7 @@ def prep_overfit_set(test_percentage):
     with open(PREPROCESSDATADIR+"/overfit/test.yaml", 'w') as f:
         f.write(yaml.dump(test, Dumper=CDumper))
 
-def build_argparser():
+def _build_argparser():
     parser = argparse.ArgumentParser(description='Preprocess your raw Bonaparte data into formats that can be used')
     parser.add_argument('--assimilate', '-a', dest='assimilate', action='store_true',
                         default=False, help='collect all individual yaml files and assimilate into master yaml (must be fone before prepping data sets)')
@@ -163,7 +163,7 @@ def build_argparser():
     return parser
 
 if __name__ == "__main__":
-    parser = build_argparser()
+    parser = _build_argparser()
     args = parser.parse_args()
     if args.run_all:
         assimilate_data()

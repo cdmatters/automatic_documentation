@@ -5,21 +5,46 @@ from tqdm import tqdm
 from tensorflow.python.layers import core as layers_core
 from tensorflow.python import debug as tf_debug
 
+from  experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, \
+                               START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
-from  experiments.utils import PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+import argparse
+
+SUMMARY_STRING = '''
+--------------------------------------------
+MODEL: {classname}
+Name: {name}
+--------------------------------------------
+--------------------------------------------
+{summary}
+--------------------------------------------
+'''
+
+EXPERIMENT_SUMMARY_STRING = '''
+--------------------------------------------
+--------------------------------------------
+DATA: vocab_size: {voc}, char_seq: {char},
+       desc_seq: {desc}, full_dataset: {full}
+--------------------------------------------
+{model}
+--------------------------------------------
+'''
 
 
 class BasicRNNModel(object):
 
-    def __init__(self, word2idx, word_weights, char_weights, rnn_size=300, batch_size=128,
-                 learning_rate=0.001):
+    def __init__(self, word2idx, word_weights, char2idx, char_weights, rnn_size=300, batch_size=128,
+                 learning_rate=0.001, name="BasicModel"):
         # To Do; all these args from config, to make saving model easier.
-        self.name = "SimpleModel"
+        self.name = name
 
         self.word_weights = word_weights
         self.char_weights = char_weights
+
         self.word2idx = word2idx
         self.idx2word = dict((v,k) for k,v in word2idx.items())
+        self.char2idx = char2idx
+        self.idx2char = dict((v,k) for k,v in char2idx.items())
 
 
         self.batch_size = batch_size
@@ -35,6 +60,17 @@ class BasicRNNModel(object):
         self._build_train_graph()
 
         print("Init loaded")
+
+    def arg_summary(self):
+        mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
+            self.rnn_size, self.learning_rate, self.batch_size)
+        data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, ".format(
+            len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1])
+        return "\n".join([mod_args, data_args])
+
+    def __str__(self):
+        return SUMMARY_STRING.format(name=self.name, classname=self.__class__.__name__,
+                                     summary=self.arg_summary())
 
     @staticmethod
     def _build_encode_decode_embeddings(input_data_sequence, char_weights,
@@ -225,8 +261,7 @@ class BasicRNNModel(object):
             arg_desc_batch = arg_desc[idx_start: idx_end]
             yield arg_name_batch, arg_desc_batch
 
-
-    def evaluate_model(self, session, test_data, data_limit=-1):
+    def evaluate_model(self, session, test_data, data_limit, do_test_dump=True):
         for test_arg_name, test_arg_desc in self._to_batch(test_data[0][:data_limit], test_data[1][:data_limit], 1):
             [inference_ids] = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.inference_id])
             for test_t, true_t in zip(inference_ids[:5], test_arg_desc[:5]):
@@ -236,33 +271,78 @@ class BasicRNNModel(object):
                         print()
             print("------------------------------------")
 
+    def dump_test(self, session, data, dump_no):
+        arg_names, arg_desc = train_data
 
-    def main(self, session, train_data, test_data=None, test_check=20):
+        ops = [self.inference_id]
+        [inferences] = self._feed_fwd(session, arg_name[:dump_no], arg_desc[:dump_no], ops)
 
-        epochs = 5_000
+        for i in range(dump_no):
+            pass
+
+
+
+    def main(self, session, epochs, train_data, test_data=None, test_check=20, do_test_dump=False):
+
         for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
 
                 ops = [self.update, self.train_loss, self.train_id]
-                _,  train_loss, train_id = self._feed_fwd(sess, arg_name, arg_desc, ops)
+                _,  train_loss, train_id = self._feed_fwd(session, arg_name, arg_desc, ops)
 
                 if i % test_check == 0:
-                    self.evaluate_model(sess, train_data, 50)
+                    self.evaluate_model(session, train_data, 50, do_test_dump)
                     print("EPOCH: {}, LOSS: {}".format(i, train_loss))
 
                 if i % test_check == 0 and test_data is not None:
-                    self.evaluate_model(sess, test_data)
+                    self.evaluate_model(session, test_data, 50, do_test_dump)
 
 
 
 
 
-if __name__=="__main__":
-    from data.preprocessed import data as DATA
+
+def _build_argparser():
+    parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
+    parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
+                        type=int, default=300,
+                        help='size of LSTM size')
+    parser.add_argument('--learning-rate', '-r', dest='lr', action='store',
+                        type=float, default=0.001,
+                        help='learning rate for model')
+    parser.add_argument('--batch-size', '-b', dest='batch_size', action='store',
+                        type=int, default=128,
+                        help='minibatch size for model')
+    parser.add_argument('--epochs', '-e', dest='epochs', action='store',
+                        type=int, default=5000,
+                        help='minibatch size for model')
+    parser.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
+                        type=int, default=10000,
+                        help='size of embedding vocab')
+    parser.add_argument('--char-seq', '-c', dest='char_seq', action='store',
+                        type=int, default=24,
+                        help='max char sequence length')
+    parser.add_argument('--desc-seq', '-d', dest='desc_seq', action='store',
+                        type=int, default=150,
+                        help='max desecription sequence length')
+    parser.add_argument('--test-freq', '-t', dest='test_freq', action='store',
+                        type=int, default=100,
+                        help='how often to run a test and dump output')
+    parser.add_argument('--do-dump', '-D', dest='do_test_dump', action='store_true',
+                        default=False,
+                        help='dump extensive test information on each test batch')
+    parser.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
+                        default=False,
+                        help='dump extensive test information on each test batch')
+    return parser
+
+def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
+                    test_freq, use_full_dataset, do_test_dump, epochs):
+    if use_full_dataset:
+        from data.preprocessed import data as DATA
+    else:
+        from data.preprocessed.overfit import data as DATA
+
     import experiments.utils as utils
-
-    vocab_size = 10000
-    char_seq_len = 24
-    desc_seq_len = 150
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = utils.get_weights_word2idx(vocab_size)
@@ -270,21 +350,38 @@ if __name__=="__main__":
     char_weights, char2idx = utils.get_weights_char2idx()
 
     print("Tokenizing the word desctiptions and characters")
-    data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
+    train_data = utils.tokenize_descriptions(DATA.train, word2idx, char2idx)
+    test_data = utils.tokenize_descriptions(DATA.test, word2idx, char2idx)
+    print("Extracting tensors train")
+    train_data = utils.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
+    test_data = utils.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
 
+    nn = BasicRNNModel(word2idx, word_weights, char2idx, char_weights,
+                        lstm_size, batch_size, lr)
 
-    test_data = utils.extract_char_and_desc_idx_tensors(data, char_seq_len, desc_seq_len)
-
-    nn = BasicRNNModel(word2idx, word_weights, char_weights)
+    summary = EXPERIMENT_SUMMARY_STRING.format(voc=vocab_size, char=char_seq,
+                                           desc=desc_seq, full=use_full_dataset,
+                                           model=nn)
+    print(summary)
 
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
 
     session_conf = tf.ConfigProto(
       intra_op_parallelism_threads=4,
       inter_op_parallelism_threads=4)
+
     sess = tf.Session(config=session_conf)
-    # sess = tf.Session()
     sess.run(init)
 
-    nn.main(sess, test_data)
+    nn.main(sess, epochs, train_data, test_data, test_check=test_freq, do_test_dump=do_test_dump)
+
+
+
+
+
+if __name__=="__main__":
+    parser = _build_argparser()
+    args = parser.parse_args()
+
+    _run_model(**vars(args))
 
