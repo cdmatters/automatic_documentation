@@ -1,6 +1,7 @@
 import argparse
 import sys
 
+from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
@@ -153,7 +154,7 @@ class BasicRNNModel(object):
 
             target_weights = tf.logical_not(tf.equal(decoder_outputs, tf.zeros_like(decoder_outputs)))
             target_weights = tf.cast(target_weights, tf.float32)
-            train_loss = (tf.reduce_sum(crossent * target_weights)) # / batch_size)
+            train_loss = (tf.reduce_sum(crossent * target_weights) / tf.cast(batch_size, tf.float32))
         return train_loss
 
     @staticmethod
@@ -176,10 +177,10 @@ class BasicRNNModel(object):
             # 0. Define our placeholders and derived vars
             # # input_data_sequence : [batch_size x max_variable_length]
             input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
-            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32)
+            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32) + 1
             # # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
-            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32)
+            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32) + 1
 
             # 1. Get Embeddings
             encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
@@ -294,20 +295,32 @@ class BasicRNNModel(object):
             all_training_loss += train_loss
 
             translations = [self.translate(i, do_join=False) for i in inference_ids]
-            reference = [self.translate(i, do_join=False) for i in test_arg_desc]
+            reference = [[self.translate(i, do_join=False)] for i in test_arg_desc]
 
             all_translations.extend(translations)
             all_references.extend(reference)
 
+        bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=True)
+        bleu_score1, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
         bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=False)
-        bleu_score, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
+        bleu_score3, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
+        
+        smoother = SmoothingFunction()
+        bleu_score2 = corpus_bleu(all_references, all_translations, smoothing_function=smoother.method2)
+        bleu_score4 = corpus_bleu(all_references, all_translations, smoothing_function=smoother.method0)
 
         sample_translations = self.sample_translation(session, test_data, test_translate)
 
-        return bleu_score * 100, sample_translations, all_training_loss
+        bleu_score = "NMT Smth: {:.3f} NLTK Smth: {:.3f} NMT: {:.3f} NLTK: {:.3f}".format(
+            bleu_score1*100, bleu_score2*100, bleu_score3*100, bleu_score4*100)
+
+        return bleu_score, sample_translations, all_training_loss
 
     def sample_translation(self, session, data, translation_count):
         arg_names, arg_descs = data
+        zipped = list(zip(arg_names, arg_descs))
+        np.random.shuffle(zipped)
+        arg_names, arg_descs = zip(*zipped)
         if translation_count <= 0 :
             return ""
         else:
@@ -334,9 +347,9 @@ class BasicRNNModel(object):
                 if i % test_check == 0:
                     
 
-                    train_bleu, train_trans, train_loss = self.evaluate_model(session, train_data, 1000, test_translate)
+                    train_bleu, train_trans, train_loss = self.evaluate_model(session, train_data, 10000, test_translate)
                     if test_data is not None:
-                        test_bleu, test_trans, test_loss = self.evaluate_model(session, test_data, 1000, test_translate)
+                        test_bleu, test_trans, test_loss = self.evaluate_model(session, test_data, 10000, test_translate)
                     print("---------------------------------------------")
                     
                     print("TRAINING: {}".format(train_bleu))
@@ -346,8 +359,8 @@ class BasicRNNModel(object):
                     print("TEST: {}".format(test_bleu))
                     print(test_trans)
                     print('--------------------')
-                    print("MINIBATCHES: {}, TRAIN_LOSS: {}, TRAIN_BLEU: {}, TEST_LOSS: {}, TEST_BLEU: {}".format(
-                        i, train_loss, train_bleu, test_loss, test_bleu))
+                    print("MINIBATCHES: {}, TRAIN_LOSS: {}, TEST_LOSS: {},\nTRAIN_BLEU: {}\nTEST_BLEU: {}".format(
+                        i, train_loss, test_loss, train_bleu, test_bleu))
                     sys.stdout.flush() # remove when adding a logger
 
 
