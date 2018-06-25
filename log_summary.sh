@@ -23,7 +23,7 @@ function log_summary(){
     sed -E -e "s/ARGN:(.*)<END>/ARGN:$bold\1$reset<END>/" -e \
               "s/(ARGN:|DESC:|INFR:)/$bold$green\1$reset/" -e \
               "s/(MINIBATCHES:|TRAIN_BLEU:|TEST_BLEU:)/$bold\1$reset/" -e \
-              "s/(----*)/$bold$black\1$reset/" -e \
+              "s/(--[A-Z]{3}--*)/$bold$black\1$reset/" -e \
               "s/(TRAINING:.*)/$bold$blue\1$reset/" -e \
               "s/(TEST:.*)/$bold$yellow\1$reset/" 
 }

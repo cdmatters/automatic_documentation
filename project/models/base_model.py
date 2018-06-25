@@ -1,4 +1,5 @@
 import argparse
+from collections import namedtuple
 import sys
 
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
@@ -24,6 +25,9 @@ DATA: vocab_size: {voc}, char_seq: {char},
 --------------------------------------------
 '''
 
+SingleTranslation = namedtuple("Translation", ['name', 'description', 'translation'])
+SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
+                                        s.name, " ".join(s.description), " ".join(s.translation))
 
 class BasicRNNModel(object):
 
@@ -51,11 +55,23 @@ class BasicRNNModel(object):
         self.input_data_sequence = None
         self.input_label_sequence = None
         self.update = None
-        self.loss = None
-
+        
+        self.train_loss = None
+        self.train_id = None        
+        
+        self.inference_loss = None
+        self.inference_id = None
+        
         self._build_train_graph()
 
+        self.merged_metrics = self._log_in_tensorboard([ ('loss', self.train_loss) ])
         print("Init loaded")
+
+    @staticmethod
+    def _log_in_tensorboard(scalar_vars):
+        for name, var in scalar_vars:
+            tf.summary.scalar(name, var)
+        return tf.summary.merge_all()
 
     def arg_summary(self):
         mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
@@ -172,6 +188,7 @@ class BasicRNNModel(object):
             update = optimizer.apply_gradients(zip(clipped_gradients, params))
         return update
 
+
     def _build_train_graph(self):
         with tf.name_scope("Model_{}".format(self.name)):
             # 0. Define our placeholders and derived vars
@@ -225,7 +242,6 @@ class BasicRNNModel(object):
             inf_translate = inf_outputs.sample_id
             inf_loss = self._get_loss(inf_logits, input_label_sequence, input_label_seq_length)
 
-
             # 7. Do Updates
             update = self._do_updates(train_loss, self.learning_rate)
 
@@ -239,11 +255,14 @@ class BasicRNNModel(object):
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
 
-    def translate(self, translate_id, filter_pad=True, lookup=None, do_join=True):
+
+    def translate(self, translate_id, filter_pad=True, lookup=None, do_join=True, prepend_tok=None):
         if lookup is None:
             lookup = self.idx2word
         if filter_pad:
             translate_id = np.trim_zeros(translate_id, 'b')
+        if prepend_tok is not None:
+            translate_id = np.insert(translate_id, 0, prepend_tok)
         
         if do_join:
             return  " ".join([lookup[i] for i in translate_id])
@@ -268,100 +287,149 @@ class BasicRNNModel(object):
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 
-    def _to_batch(self, arg_name, arg_desc, epochs=1e5, do_prog_bar=False):
+    def _to_batch(self, arg_name, arg_desc, epochs=1, do_prog_bar=False):
         assert arg_name.shape[0] == arg_desc.shape[0]
         size = arg_name.shape[0]
 
         batch_per_epoch = (size // self.batch_size) + 1
 
-        zipped = list(zip(arg_name, arg_desc))
-        np.random.shuffle(zipped)
-        arg_name, arg_desc = zip(*zipped)
+        for e in range(epochs):
+            zipped = list(zip(arg_name, arg_desc))
+            np.random.shuffle(zipped)
+            arg_name, arg_desc = zip(*zipped)
 
-        for i in tqdm(range(batch_per_epoch * epochs), disable=True):
-            idx_start = (i % batch_per_epoch) * self.batch_size
-            idx_end = ( (i % batch_per_epoch) + 1)  * self.batch_size
+            for i in range(batch_per_epoch):
+                idx_start = i * self.batch_size
+                idx_end = (i +1) * self.batch_size
 
-            arg_name_batch = arg_name[idx_start: idx_end]
-            arg_desc_batch = arg_desc[idx_start: idx_end]
-            yield arg_name_batch, arg_desc_batch
+                arg_name_batch = arg_name[idx_start: idx_end]
+                arg_desc_batch = arg_desc[idx_start: idx_end]
+                yield arg_name_batch, arg_desc_batch
 
-    def evaluate_model(self, session, test_data, data_limit, test_translate=0):
-        all_translations = []
-        all_references = []
-        all_training_loss = 0
-        for test_arg_name, test_arg_desc in self._to_batch(test_data[0][:data_limit], test_data[1][:data_limit], 1):
-            train_loss, inference_ids = self._feed_fwd(session, test_arg_name, test_arg_desc, [self.train_loss, self.inference_id])
-            all_training_loss += train_loss
-
-            translations = [self.translate(i, do_join=False) for i in inference_ids]
-            reference = [[self.translate(i, do_join=False)] for i in test_arg_desc]
-
-            all_translations.extend(translations)
-            all_references.extend(reference)
-
-        bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=True)
-        bleu_score1, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
-        bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=False)
-        bleu_score3, precisions, bp, ratio, translation_length, reference_length = bleu_tuple
-        
-        smoother = SmoothingFunction()
-        bleu_score2 = corpus_bleu(all_references, all_translations, smoothing_function=smoother.method2)
-        bleu_score4 = corpus_bleu(all_references, all_translations, smoothing_function=smoother.method0)
-
-        sample_translations = self.sample_translation(session, test_data, test_translate)
-
-        bleu_score = "NMT Smth: {:.3f} NLTK Smth: {:.3f} NMT: {:.3f} NLTK: {:.3f}".format(
-            bleu_score1*100, bleu_score2*100, bleu_score3*100, bleu_score4*100)
-
-        return bleu_score, sample_translations, all_training_loss
-
-    def sample_translation(self, session, data, translation_count):
-        arg_names, arg_descs = data
-        zipped = list(zip(arg_names, arg_descs))
-        np.random.shuffle(zipped)
-        arg_names, arg_descs = zip(*zipped)
-        if translation_count <= 0 :
-            return ""
-        else:
-            ops = [self.inference_id]
-            [inference_ids] = self._feed_fwd(session, arg_names[:translation_count], arg_descs[:translation_count], ops)
-
-            results = []
-            for i in range(translation_count):
-                arg_name = self.translate(arg_names[i], lookup=self.idx2char).replace(" ","")
-                arg_desc = self.translate(arg_descs[i])
-                inference_desc = START_OF_TEXT_TOKEN + " " + self.translate(inference_ids[i])
     
-                string = "----\nARGN: {}\nDESC: {}\nINFR: {}".format(arg_name, arg_desc, inference_desc)
-                results.append(string)
-            return "\n".join(results)
+    def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
+        all_names = []
+        all_references = []
+        all_translations = []
+        all_training_loss = []
 
-    def main(self, session, epochs, train_data, test_data=None, test_check=20, test_translate=0):
+        ops = [self.merged_metrics, self.train_loss, self.inference_id]
+        for arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
+            
+            metrics, train_loss, inference_ids = self._feed_fwd(session, arg_name, arg_desc, ops)
 
+
+            # Translating quirks:
+            #    names: we want: 'axis<END>' not 'a x i s <END>'
+            #    references: we want: [['<START>', 'this', 'reference', '<END>']] not ['<START>', 'this', 'reference','<END>'], 
+            #                 because compute_bleu takes multiple references
+            #    translations: we want ['<START>', 'this', 'translation', '<END>'] not ['this', 'translation', '<END>']
+            names = [self.translate(i, lookup=self.idx2char).replace(" ","") for i in arg_name]
+            references = [[self.translate(i, do_join=False)] for i in arg_desc]
+            translations = [self.translate(i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids]
+ 
+            all_training_loss.append(train_loss)
+            all_names.extend(names)
+            all_references.extend(references)
+            all_translations.extend(translations)
+
+        # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
+        # To Do: Replace with NLTK:
+        #         smoother = SmoothingFunction()
+        #         bleu_score = corpus_bleu(all_references, all_translations, smoothing_function=smoother.method2)
+        bleu_tuple = bleu.compute_bleu(all_references, all_translations, max_order=4, smooth=False)
+        av_loss = np.mean(all_training_loss)
+
+        translations = [SingleTranslation(n, d[0], t) for n, d, t in zip(all_names, all_references, all_translations)]
+
+
+        
+        return bleu_tuple, av_loss, translations[:max_translations]
+
+
+    @staticmethod
+    def scalar_to_summary(name, value):
+        return tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
+
+    @staticmethod
+    def log_tensorboard(filewriter, i, bleu_tuple, av_loss, translations):
+        s = BasicRNNModel.scalar_to_summary("av_loss", av_loss)
+        filewriter.add_summary(s, i)
+        
+        b = BasicRNNModel.scalar_to_summary("bleu score", bleu_tuple[0]*100)
+        filewriter.add_summary(b, i)
+
+    @staticmethod
+    def build_translation_log_string(prefix, bleu_tuple, loss, translations):
+        log = [
+            "{}: Bleu:{}, Av Loss:".format(prefix, bleu_tuple[0] * 100, loss),
+            "\n--{}--\n".format(prefix[:3]).join(str(t) for t in translations),
+            '--------------------'
+        ]
+        return "\n".join(log)
+
+    @staticmethod
+    def build_summary_log_string(i, train_evaluation_tuple, test_evaluation_tuple):
+        return "MINIBATCHES: {}, TRAIN_LOSS: {}, TEST_LOSS: {},\nTRAIN_BLEU: {}\nTEST_BLEU: {}".format(
+            i, train_evaluation_tuple[1], test_evaluation_tuple[1],
+             train_evaluation_tuple[0][0], test_evaluation_tuple[0][0])
+
+    @staticmethod
+    def log_std_out(i, evaluation_tuple, test_evaluation_tuple):
+        print("---------------------------------------------")
+        train_log = BasicRNNModel.build_translation_log_string("TRAINING", *evaluation_tuple)
+        test_log = BasicRNNModel.build_translation_log_string("TEST", *test_evaluation_tuple)
+        summary = BasicRNNModel.build_summary_log_string(i, evaluation_tuple, test_evaluation_tuple)
+
+        # bleu_tuple, av_loss, translations = evaluation_tuple
+        # test_bleu_tuple, test_av_loss, test_translations = test_evaluation_tuple
+        
+                    
+        # print("TRAINING: {}".format(bleu_tuple[0] * 100))
+        # print("\n---\n".join(str(t) for t in translations))
+        # print('--------------------')
+
+        # print("TEST: {}".format(test_bleu_tuple[0] * 100))
+        # print("\n---\n".join(str(t) for t in test_translations))
+        # print('--------------------')
+        print(train_log)
+        print(test_log)
+        print(summary)
+        # print("MINIBATCHES: {}, TRAIN_LOSS: {}, TEST_LOSS: {},\nTRAIN_BLEU: {}\nTEST_BLEU: {}".format(
+            # i, av_loss, test_av_loss, bleu_tuple[0], test_bleu_tuple[0]))
+
+        sys.stdout.flush() # remove when adding a logger
+    
+
+
+
+    def main(self, session, epochs, train_data, filewriters, test_data=None, test_check=20, test_translate=0):
         for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
 
-                ops = [self.update, self.train_loss, self.train_id]
-                _,  _, train_id = self._feed_fwd(session, arg_name, arg_desc, ops)
+                ops = [self.update, self.train_loss, self.train_id, self.merged_metrics]
+                _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops)
+                filewriters["train_continuous"].add_summary(train_summary, i)
 
                 if i % test_check == 0:
+                    evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)
+                    
+                    bleu_tuple, av_loss, translations = evaluation_tuple
+                    self.log_tensorboard(filewriters['train'], i, bleu_tuple, av_loss, translations)
+
+                    # train_bleu, train_trans, train_loss = self.evaluate_model(session, train_data, 10000, test_translate)
                     
 
-                    train_bleu, train_trans, train_loss = self.evaluate_model(session, train_data, 10000, test_translate)
                     if test_data is not None:
-                        test_bleu, test_trans, test_loss = self.evaluate_model(session, test_data, 10000, test_translate)
-                    print("---------------------------------------------")
-                    
-                    print("TRAINING: {}".format(train_bleu))
-                    print(train_trans)
-                    print('--------------------')
+                        test_evaluation_tuple = self.evaluate_bleu(session, test_data, max_points=10000)
+                        
+                        test_bleu_tuple, test_av_loss, test_translations = test_evaluation_tuple
+                        self.log_tensorboard(filewriters['test'], i, test_bleu_tuple, test_av_loss, test_translations)
+                        
+                        # test_bleu, test_trans, test_loss = self.evaluate_model(session, test_data, 10000, test_translate)
+                        # test_writer()
 
-                    print("TEST: {}".format(test_bleu))
-                    print(test_trans)
-                    print('--------------------')
-                    print("MINIBATCHES: {}, TRAIN_LOSS: {}, TEST_LOSS: {},\nTRAIN_BLEU: {}\nTEST_BLEU: {}".format(
-                        i, train_loss, test_loss, train_bleu, test_bleu))
-                    sys.stdout.flush() # remove when adding a logger
+                    self.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
+
 
 
 
@@ -397,10 +465,13 @@ def _build_argparser():
     parser.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
                         default=False,
                         help='dump extensive test information on each test batch')
+    parser.add_argument('--logdir', '-L', dest='logdir', action='store',
+                        type=str, default='_logdir',
+                        help='directory for storing logs and raw experiment runs')
     return parser
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
-                    test_freq, use_full_dataset, test_translate, epochs):
+                    test_freq, use_full_dataset, test_translate, epochs, logdir):
     if use_full_dataset:
         from project.data.preprocessed import data as DATA
     else:
@@ -416,9 +487,12 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     print("Tokenizing the word desctiptions and characters")
     train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
     test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
+    
     print("Extracting tensors train and test")
     train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
     test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+
+    # TO DO: set up logdir location properly and delet files
 
     nn = BasicRNNModel(word2idx, word_weights, char2idx, char_weights,
                         lstm_size, batch_size, lr)
@@ -435,9 +509,15 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
       inter_op_parallelism_threads=4)
 
     sess = tf.Session(config=session_conf)
+    
+    filewriters = {
+        'train_continuous':  tf.summary.FileWriter('logdir/train_continuous', sess.graph),
+        'train': tf.summary.FileWriter('logdir/train', sess.graph),
+        'test': tf.summary.FileWriter('logdir/test')
+    }
+    
     sess.run(init)
-
-    nn.main(sess, epochs, train_data, test_data, test_check=test_freq, test_translate=test_translate)
+    nn.main(sess, epochs, train_data, filewriters, test_data, test_check=test_freq, test_translate=test_translate)
 
 
 if __name__=="__main__":
