@@ -1,11 +1,7 @@
 import argparse
-from collections import namedtuple
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
-from tensorflow.python import debug as tf_debug
-from tqdm import tqdm
 
 from project.models.base_model import BasicRNNModel, ExperimentSummary, \
                                       EmbedTuple, argparse_basic_wrap
@@ -13,18 +9,6 @@ import project.utils.logging as plogging
 import project.utils.tokenize as tokenize
 from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
-
-
-EXPERIMENT_SUMMARY_STRING = '''
---------------------------------------------
---------------------------------------------
-DATA: vocab_size: {voc}, char_seq: {char},
-       desc_seq: {desc}, full_dataset: {full}
---------------------------------------------
-{model}
---------------------------------------------
---------------------------------------------
-'''
 
 class CharSeqBaseline(BasicRNNModel):
 
@@ -187,7 +171,6 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
 
     # TO DO: set up logdir location properly and delet files
     
-
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr)
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
     

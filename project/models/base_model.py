@@ -1,15 +1,10 @@
 
 import abc
-import argparse
 from collections import namedtuple
-import sys
 
 from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.layers import core as layers_core
-from tensorflow.python import debug as tf_debug
-from tqdm import tqdm
 
 from project.external.nmt import bleu
 from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
@@ -54,6 +49,16 @@ class BasicRNNModel(abc.ABC):
         self.idx2word = dict((v,k) for k,v in embed_tuple.word2idx.items())
         self.char2idx = embed_tuple.char2idx
         self.idx2char = dict((v,k) for k,v in embed_tuple.char2idx.items())
+
+        self.input_data_sequence = None
+        self.input_label_sequence = None
+        self.update = None
+        
+        self.train_loss = None
+        self.train_id = None        
+        
+        self.inference_loss = None
+        self.inference_id = None
 
 
     @abc.abstractmethod
@@ -254,8 +259,7 @@ class BasicRNNModel(abc.ABC):
         for arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
             
             metrics, train_loss, inference_ids = self._feed_fwd(session, arg_name, arg_desc, ops)
-
-
+            
             # Translating quirks:
             #    names: we want: 'axis<END>' not 'a x i s <END>'
             #    references: we want: [['<START>', 'this', 'reference', '<END>']] not ['<START>', 'this', 'reference','<END>'], 
