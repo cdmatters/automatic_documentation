@@ -19,10 +19,10 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 EXPERIMENT_SUMMARY_STRING = '''
 --------------------------------------------
 --------------------------------------------
-DATA: vocab_size: {voc}, char_seq: {char},
+DATA: vocab_size: {vocab}, char_seq: {char},
        desc_seq: {desc}, full_dataset: {full}
 --------------------------------------------
-{model}
+{nn}
 --------------------------------------------
 --------------------------------------------
 '''
@@ -31,21 +31,29 @@ SingleTranslation = namedtuple("Translation", ['name', 'description', 'translati
 SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
                                         s.name, " ".join(s.description), " ".join(s.translation))
 
+EmbedTuple = namedtuple("EmbedTuple", ['word_weights', 'word2idx', 'char_weights','char2idx'])
+
+ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq','full_dataset'])
+ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
+                                            vocab=s.vocab, char=s.char_seq, desc=s.desc_seq, 
+                                            full=s.full_dataset, nn=s.nn)
+
+
 class BasicRNNModel(abc.ABC):
 
     summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
 
-    def __init__(self, word2idx, word_weights, char2idx, char_weights, name="BasicModel"):
+    def __init__(self, embed_tuple, name="BasicModel"):
         # To Do; all these args from config, to make saving model easier.
         self.name = name
 
-        self.word_weights = word_weights
-        self.char_weights = char_weights
+        self.word_weights = embed_tuple.word_weights
+        self.char_weights = embed_tuple.char_weights
 
-        self.word2idx = word2idx
-        self.idx2word = dict((v,k) for k,v in word2idx.items())
-        self.char2idx = char2idx
-        self.idx2char = dict((v,k) for k,v in char2idx.items())
+        self.word2idx = embed_tuple.word2idx
+        self.idx2word = dict((v,k) for k,v in embed_tuple.word2idx.items())
+        self.char2idx = embed_tuple.char2idx
+        self.idx2char = dict((v,k) for k,v in embed_tuple.char2idx.items())
 
 
     @abc.abstractmethod
@@ -270,53 +278,11 @@ class BasicRNNModel(abc.ABC):
         av_loss = np.mean(all_training_loss)
 
         translations = [SingleTranslation(n, d[0], t) for n, d, t in zip(all_names, all_references, all_translations)]
-
-
         
         return bleu_tuple, av_loss, translations[:max_translations]
 
 
-    @staticmethod
-    def scalar_to_summary(name, value):
-        return tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
-
-    @staticmethod
-    def log_tensorboard(filewriter, i, bleu_tuple, av_loss, translations):
-        s = BasicRNNModel.scalar_to_summary("av_loss", av_loss)
-        filewriter.add_summary(s, i)
-        
-        b = BasicRNNModel.scalar_to_summary("bleu score", bleu_tuple[0]*100)
-        filewriter.add_summary(b, i)
-
-    @staticmethod
-    def build_translation_log_string(prefix, bleu_tuple, loss, translations):
-        log = [
-            "{}: Bleu:{}, Av Loss:".format(prefix, bleu_tuple[0] * 100, loss),
-            "\n--{}--\n".format(prefix[:3]).join(str(t) for t in translations),
-            '--------------------'
-        ]
-        return "\n".join(log)
-
-    @staticmethod
-    def build_summary_log_string(i, train_evaluation_tuple, test_evaluation_tuple):
-        return "MINIBATCHES: {}, TRAIN_LOSS: {}, TEST_LOSS: {},\nTRAIN_BLEU: {}\nTEST_BLEU: {}".format(
-            i, train_evaluation_tuple[1], test_evaluation_tuple[1],
-             train_evaluation_tuple[0][0] * 100 , test_evaluation_tuple[0][0] * 100 )
-
-    @staticmethod
-    def log_std_out(i, evaluation_tuple, test_evaluation_tuple):
-        print("---------------------------------------------")
-        train_log = BasicRNNModel.build_translation_log_string("TRAINING", *evaluation_tuple)
-        test_log = BasicRNNModel.build_translation_log_string("TEST", *test_evaluation_tuple)
-        summary = BasicRNNModel.build_summary_log_string(i, evaluation_tuple, test_evaluation_tuple)
-
-        print(train_log)
-        print(test_log)
-        print(summary)
-
-        sys.stdout.flush() # remove when adding a logger
-
-def add_basic_argparser(parser):
+def argparse_basic_wrap(parser):
     parser.add_argument('--epochs', '-e', dest='epochs', action='store',
                         type=int, default=5000,
                         help='minibatch size for model')

@@ -1,16 +1,16 @@
 import argparse
 from collections import namedtuple
-import sys
 
-from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 from tensorflow.python import debug as tf_debug
 from tqdm import tqdm
 
-from project.models.base_model import BasicRNNModel, add_basic_argparser
-from project.external.nmt import bleu
+from project.models.base_model import BasicRNNModel, ExperimentSummary, \
+                                      EmbedTuple, argparse_basic_wrap
+import project.utils.logging as plogging
+import project.utils.tokenize as tokenize
 from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
@@ -28,9 +28,8 @@ DATA: vocab_size: {voc}, char_seq: {char},
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, word2idx, word_weights, char2idx, char_weights, 
-                 rnn_size=300, batch_size=128, learning_rate=0.001, name="BasicModel"):
-        super().__init__(word2idx, word_weights, char2idx, char_weights, name)
+    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, name="BasicModel"):
+        super().__init__(embed_tuple, name)
         # To Do; all these args from config, to make saving model easier.
 
         self.batch_size = batch_size
@@ -141,16 +140,15 @@ class CharSeqBaseline(BasicRNNModel):
 
                 if i % test_check == 0:
                     evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)                    
-                    self.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
+                    plogging.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
 
                     if test_data is not None:
                         test_evaluation_tuple = self.evaluate_bleu(session, test_data, max_points=10000)
-                        self.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
+                        plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
 
-                    self.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
+                    plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
 
 def _build_argparser():
-
     parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
                         type=int, default=300,
@@ -161,17 +159,16 @@ def _build_argparser():
     parser.add_argument('--batch-size', '-b', dest='batch_size', action='store',
                         type=int, default=128,
                         help='minibatch size for model')
-    parser = add_basic_argparser(parser)
+    parser = argparse_basic_wrap(parser)
     return parser
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, test_translate, epochs, logdir):
     if use_full_dataset:
-        from project.data.preprocessed import data as DATA
-    else:
-        from project.data.preprocessed.overfit import data as DATA
+        from project.data.preprocessed import main_data as DATA
 
-    import project.utils.tokenize as tokenize
+    else:
+        from project.data.preprocessed.overfit import overfit_data as DATA
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
@@ -185,24 +182,24 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     print("Extracting tensors train and test")
     train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
     test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+    
+    embed_tuple = EmbedTuple(word_weights, word2idx, char_weights, char2idx)
 
     # TO DO: set up logdir location properly and delet files
+    
 
-    nn = CharSeqBaseline(word2idx, word_weights, char2idx, char_weights,
-                        lstm_size, batch_size, lr)
-
-    summary = EXPERIMENT_SUMMARY_STRING.format(voc=vocab_size, char=char_seq,
-                                           desc=desc_seq, full=use_full_dataset,
-                                           model=nn)
+    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr)
+    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
+    
     print(summary)
 
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
-
     session_conf = tf.ConfigProto(
-      intra_op_parallelism_threads=4,
-      inter_op_parallelism_threads=4)
+               intra_op_parallelism_threads=4,
+               inter_op_parallelism_threads=4)
 
     sess = tf.Session(config=session_conf)
+
     
     filewriters = {
         'train_continuous':  tf.summary.FileWriter('logdir/train_continuous', sess.graph),
