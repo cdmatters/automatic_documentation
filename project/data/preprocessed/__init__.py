@@ -14,11 +14,19 @@ Data = namedtuple("Data", ["train","test"])
 
 def load_main():
     dirname = os.path.dirname(os.path.abspath(__file__))
-    with open('{}/main_train.yaml'.format(dirname), 'r') as f:
-        train = load(f, Loader=CLoader)
-    with open('{}/main_test.yaml'.format(dirname), 'r') as f:
-        test = load(f, Loader=CLoader)
-    return Data(train, test)
+    train_file = '{}/main_train.yaml'.format(dirname)
+    test_file = '{}/main_test.yaml'.format(dirname)
+
+    if os.path.isfile(train_file) and  os.path.isfile(test_file):
+        with open(train_file, 'r') as f:
+            train = load(f, Loader=CLoader)
+        with open(test_file, 'r') as f:
+            test = load(f, Loader=CLoader)
+        return Data(train, test)
+    else:
+        return None
+
+
 
 data = load_main()
 

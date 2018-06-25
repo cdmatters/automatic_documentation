@@ -14,10 +14,16 @@ Data = namedtuple("Data", ["train","test"])
 
 def load_overfit():
     dirname = os.path.dirname(os.path.abspath(__file__))
-    with open('{}/train.yaml'.format(dirname), 'r') as f:
-        train = load(f, Loader=CLoader)
-    with open('{}/test.yaml'.format(dirname), 'r') as f:
-        test = load(f, Loader=CLoader)
-    return Data(train, test)
+    train_file = '{}/train.yaml'.format(dirname)
+    test_file = '{}/test.yaml'.format(dirname)
+
+    if os.path.isfile(train_file) and  os.path.isfile(test_file):
+        with open(train_file, 'r') as f:
+            train = load(f, Loader=CLoader)
+        with open(test_file, 'r') as f:
+            test = load(f, Loader=CLoader)
+        return Data(train, test)
+    else:
+        return None
 
 data = load_overfit()
