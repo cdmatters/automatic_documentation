@@ -10,7 +10,7 @@ def add_bool(self, node):
     return self.construct_scalar(node)
 Constructor.add_constructor(u'tag:yaml.org,2002:bool', add_bool)
 
-Data = namedtuple("Data", ["train","test"])
+DataTuple = namedtuple("DataTuple", ["train","test"])
 
 def load_overfit():
     dirname = os.path.dirname(os.path.abspath(__file__))
@@ -22,8 +22,8 @@ def load_overfit():
             train = load(f, Loader=CLoader)
         with open(test_file, 'r') as f:
             test = load(f, Loader=CLoader)
-        return Data(train, test)
+        return DataTuple(train, test)
     else:
         return None
 
-data = load_overfit()
+overfit_data = load_overfit()
