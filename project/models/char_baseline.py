@@ -1,0 +1,222 @@
+import argparse
+from collections import namedtuple
+import sys
+
+from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
+import numpy as np
+import tensorflow as tf
+from tensorflow.python.layers import core as layers_core
+from tensorflow.python import debug as tf_debug
+from tqdm import tqdm
+
+from project.models.base_model import BasicRNNModel, add_basic_argparser
+from project.external.nmt import bleu
+from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
+                               START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+
+
+EXPERIMENT_SUMMARY_STRING = '''
+--------------------------------------------
+--------------------------------------------
+DATA: vocab_size: {voc}, char_seq: {char},
+       desc_seq: {desc}, full_dataset: {full}
+--------------------------------------------
+{model}
+--------------------------------------------
+--------------------------------------------
+'''
+
+class CharSeqBaseline(BasicRNNModel):
+
+    def __init__(self, word2idx, word_weights, char2idx, char_weights, 
+                 rnn_size=300, batch_size=128, learning_rate=0.001, name="BasicModel"):
+        super().__init__(word2idx, word_weights, char2idx, char_weights, name)
+        # To Do; all these args from config, to make saving model easier.
+
+        self.batch_size = batch_size
+        self.learning_rate = learning_rate
+        self.rnn_size = rnn_size
+
+        # Graph Variables (built later)
+        self.input_data_sequence = None
+        self.input_label_sequence = None
+        self.update = None
+        
+        self.train_loss = None
+        self.train_id = None        
+        
+        self.inference_loss = None
+        self.inference_id = None
+        
+        self._build_train_graph()
+        self.merged_metrics = self._log_in_tensorboard()
+        
+        print("Init loaded")
+
+    def arg_summary(self):
+        mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
+            self.rnn_size, self.learning_rate, self.batch_size)
+        
+        data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, ".format(
+            len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1])
+        return "\n".join([mod_args, data_args])
+    
+    def _log_in_tensorboard(self):
+        tf.summary.scalar('loss', self.train_loss)
+        return tf.summary.merge_all()
+
+    def _build_train_graph(self):
+        with tf.name_scope("Model_{}".format(self.name)):
+            # 0. Define our placeholders and derived vars
+            # # input_data_sequence : [batch_size x max_variable_length]
+            input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
+            input_data_seq_length = tf.argmin(input_data_sequence, axis=1, output_type=tf.int32) + 1
+            # # input_label_sequence  : [batch_size x max_docstring_length]
+            input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
+            input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32) + 1
+
+            # 1. Get Embeddings
+            encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
+                                                    input_data_sequence, self.char_weights,
+                                                    input_label_sequence, self.word_weights)
+
+            # 2. Build out Encoder
+            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
+
+            # 3. Build out Cell ith attention
+            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="RNNencoder")
+
+            desc_vocab_size, _ = self.word_weights.shape
+            projection_layer = layers_core.Dense(desc_vocab_size, use_bias=False)
+
+            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
+                self.rnn_size, encoder_outputs,
+                memory_sequence_length=input_data_seq_length)
+            
+            decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+                decoder_rnn_cell, attention_mechanism,
+                attention_layer_size=self.rnn_size)
+
+            # 4. Build out helpers
+            train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
+                                                    state,projection_layer, decoder_weights, input_label_seq_length,
+                                                    decode_embedded)
+
+            inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
+                                                    state,projection_layer, decoder_weights,
+                                                    self.word2idx[START_OF_TEXT_TOKEN],
+                                                    self.word2idx[END_OF_TEXT_TOKEN])
+            
+
+            # 5. Define Train Loss
+            train_logits = train_outputs.rnn_output
+            train_loss = self._get_loss(train_logits, input_label_sequence, input_label_seq_length)
+            train_translate = train_outputs.sample_id
+            
+            # 6. Define Translation
+            inf_logits = inf_outputs.rnn_output
+            inf_translate = inf_outputs.sample_id
+            inf_loss = self._get_loss(inf_logits, input_label_sequence, input_label_seq_length)
+
+            # 7. Do Updates
+            update = self._do_updates(train_loss, self.learning_rate)
+
+            # 8. Save Variables to Model
+            self.input_data_sequence = input_data_sequence
+            self.input_label_sequence = input_label_sequence
+            self.update = update
+            self.train_loss = train_loss
+            self.train_id = train_translate
+
+            self.inference_loss = inf_loss
+            self.inference_id = inf_translate
+
+
+    def main(self, session, epochs, train_data, filewriters, test_data=None, test_check=20, test_translate=0):
+        for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
+
+                ops = [self.update, self.train_loss, self.train_id, self.merged_metrics]
+                _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops)
+                filewriters["train_continuous"].add_summary(train_summary, i)
+
+                if i % test_check == 0:
+                    evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)                    
+                    self.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
+
+                    if test_data is not None:
+                        test_evaluation_tuple = self.evaluate_bleu(session, test_data, max_points=10000)
+                        self.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
+
+                    self.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
+
+def _build_argparser():
+
+    parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
+    parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
+                        type=int, default=300,
+                        help='size of LSTM size')
+    parser.add_argument('--learning-rate', '-r', dest='lr', action='store',
+                        type=float, default=0.001,
+                        help='learning rate for model')
+    parser.add_argument('--batch-size', '-b', dest='batch_size', action='store',
+                        type=int, default=128,
+                        help='minibatch size for model')
+    parser = add_basic_argparser(parser)
+    return parser
+
+def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
+                    test_freq, use_full_dataset, test_translate, epochs, logdir):
+    if use_full_dataset:
+        from project.data.preprocessed import data as DATA
+    else:
+        from project.data.preprocessed.overfit import data as DATA
+
+    import project.utils.tokenize as tokenize
+
+    print("Loading GloVe weights and word to index lookup table")
+    word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
+    print("Creating char to index look up table")
+    char_weights, char2idx = tokenize.get_weights_char2idx()
+
+    print("Tokenizing the word desctiptions and characters")
+    train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
+    test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
+    
+    print("Extracting tensors train and test")
+    train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
+    test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+
+    # TO DO: set up logdir location properly and delet files
+
+    nn = CharSeqBaseline(word2idx, word_weights, char2idx, char_weights,
+                        lstm_size, batch_size, lr)
+
+    summary = EXPERIMENT_SUMMARY_STRING.format(voc=vocab_size, char=char_seq,
+                                           desc=desc_seq, full=use_full_dataset,
+                                           model=nn)
+    print(summary)
+
+    init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
+
+    session_conf = tf.ConfigProto(
+      intra_op_parallelism_threads=4,
+      inter_op_parallelism_threads=4)
+
+    sess = tf.Session(config=session_conf)
+    
+    filewriters = {
+        'train_continuous':  tf.summary.FileWriter('logdir/train_continuous', sess.graph),
+        'train': tf.summary.FileWriter('logdir/train', sess.graph),
+        'test': tf.summary.FileWriter('logdir/test')
+    }
+    
+    sess.run(init)
+    nn.main(sess, epochs, train_data, filewriters, test_data, test_check=test_freq, test_translate=test_translate)
+
+
+if __name__=="__main__":
+    parser = _build_argparser()
+    args = parser.parse_args()
+
+    _run_model(**vars(args))
+
