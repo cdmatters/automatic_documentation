@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime
 
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
@@ -115,8 +116,9 @@ class CharSeqBaseline(BasicRNNModel):
             self.inference_id = inf_translate
 
 
-    def main(self, session, epochs, train_data, filewriters, test_data=None, test_check=20, test_translate=0):
-        for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
+    def main(self, session, epochs, train_data, log_dir, filewriters, test_data=None, test_check=20, test_translate=0):
+        try:
+            for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
 
                 ops = [self.update, self.train_loss, self.train_id, self.merged_metrics]
                 _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops)
@@ -131,6 +133,10 @@ class CharSeqBaseline(BasicRNNModel):
                         plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
 
                     plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
+                    plogging.save(session, log_dir, self.name, i)
+        except KeyboardInterrupt as e:
+            plogging.save(session, log_dir, self.name, i)
+
 
 def _build_argparser():
     parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
@@ -150,7 +156,6 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, test_translate, epochs, logdir):
     if use_full_dataset:
         from project.data.preprocessed import main_data as DATA
-
     else:
         from project.data.preprocessed.overfit import overfit_data as DATA
 
@@ -176,6 +181,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     
     print(summary)
 
+
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
     session_conf = tf.ConfigProto(
                intra_op_parallelism_threads=4,
@@ -184,14 +190,17 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     sess = tf.Session(config=session_conf)
 
     
+    log_str =  logdir + '_' + datetime.strftime(datetime.now(), '%m%y_%H%M%S')
     filewriters = {
-        'train_continuous':  tf.summary.FileWriter('logdir/train_continuous', sess.graph),
-        'train': tf.summary.FileWriter('logdir/train', sess.graph),
-        'test': tf.summary.FileWriter('logdir/test')
+        'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
+        'train': tf.summary.FileWriter('logs/{}/train'.format(log_str), sess.graph),
+        'test': tf.summary.FileWriter('logs/{}/test'.format(log_str))
     }
-    
+
     sess.run(init)
-    nn.main(sess, epochs, train_data, filewriters, test_data, test_check=test_freq, test_translate=test_translate)
+    # plogging.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
+    nn.main(sess, epochs, train_data, log_str, filewriters, test_data, 
+            test_check=test_freq, test_translate=test_translate)
 
 
 if __name__=="__main__":

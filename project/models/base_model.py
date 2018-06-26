@@ -248,6 +248,7 @@ class BasicRNNModel(abc.ABC):
                 arg_desc_batch = arg_desc[idx_start: idx_end]
                 yield arg_name_batch, arg_desc_batch
 
+
     
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
@@ -309,13 +310,10 @@ def argparse_basic_wrap(parser):
                         default=False,
                         help='dump extensive test information on each test batch')
     parser.add_argument('--logdir', '-L', dest='logdir', action='store',
-                        type=str, default='_logdir',
+                        type=str, default='logdir',
                         help='directory for storing logs and raw experiment runs')
     return parser
 
 if __name__=="__main__":
-    parser = basic_argparser()
-    args = parser.parse_args()
-
-    _run_model(**vars(args))
+    print("ABSTRACT BASE CLASS")
 
