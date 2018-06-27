@@ -5,8 +5,10 @@ import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
 from project.models.base_model import BasicRNNModel, ExperimentSummary, \
-                                      EmbedTuple, argparse_basic_wrap
+                                        argparse_basic_wrap
+import project.utils.args as args
 import project.utils.logging as plogging
+import project.utils.saveload as saveload
 import project.utils.tokenize as tokenize
 from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
@@ -135,52 +137,45 @@ class CharSeqBaseline(BasicRNNModel):
                     plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
                     
                     if i > 0:
-                        plogging.save(session, log_dir, self.name, i)
+                        saveload.save(session, log_dir, self.name, i)
         except KeyboardInterrupt as e:
-            plogging.save(session, log_dir, self.name, i)
+            saveload.save(session, log_dir, self.name, i)
 
-
+@args.log_args
+@args.train_args
+@args.data_args
 def _build_argparser():
     parser = argparse.ArgumentParser(description='Run the basic LSTM model on the overfit dataset')
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
                         type=int, default=300,
                         help='size of LSTM size')
-    parser.add_argument('--learning-rate', '-r', dest='lr', action='store',
-                        type=float, default=0.001,
-                        help='learning rate for model')
-    parser.add_argument('--batch-size', '-b', dest='batch_size', action='store',
-                        type=int, default=128,
-                        help='minibatch size for model')
-    parser = argparse_basic_wrap(parser)
     return parser
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, test_translate, epochs, logdir):
-    if use_full_dataset:
-        from project.data.preprocessed import main_data as DATA
-    else:
-        from project.data.preprocessed.overfit import overfit_data as DATA
+    # if use_full_dataset:
+    #     from project.data.preprocessed import main_data as DATA
+    # else:
+    #     from project.data.preprocessed.overfit import overfit_data as DATA
 
-    print("Loading GloVe weights and word to index lookup table")
-    word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
-    print("Creating char to index look up table")
-    char_weights, char2idx = tokenize.get_weights_char2idx()
+    # print("Loading GloVe weights and word to index lookup table")
+    # word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
+    # print("Creating char to index look up table")
+    # char_weights, char2idx = tokenize.get_weights_char2idx()
 
-    print("Tokenizing the word desctiptions and characters")
-    train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
-    test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
+    # print("Tokenizing the word desctiptions and characters")
+    # train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
+    # test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
     
-    print("Extracting tensors train and test")
-    train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
-    test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+    # print("Extracting tensors train and test")
+    # train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
+    # test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
     
-    embed_tuple = EmbedTuple(word_weights, word2idx, char_weights, char2idx)
-
-    # TO DO: set up logdir location properly and delet files
-    
+    embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
+                                   vocab_size, char_seq, desc_seq, use_full_dataset)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr)
-    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
     
+    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
     print(summary)
 
 
@@ -201,7 +196,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
 
     sess.run(init)
     # plogging.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
-    nn.main(sess, epochs, train_data, log_str, filewriters, test_data, 
+    nn.main(sess, epochs, data_tuple.train, log_str, filewriters, data_tuple.test, 
             test_check=test_freq, test_translate=test_translate)
 
 

@@ -26,8 +26,6 @@ SingleTranslation = namedtuple("Translation", ['name', 'description', 'translati
 SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
                                         s.name, " ".join(s.description), " ".join(s.translation))
 
-EmbedTuple = namedtuple("EmbedTuple", ['word_weights', 'word2idx', 'char_weights','char2idx'])
-
 ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq','full_dataset'])
 ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
                                             vocab=s.vocab, char=s.char_seq, desc=s.desc_seq, 
@@ -285,6 +283,8 @@ class BasicRNNModel(abc.ABC):
         translations = [SingleTranslation(n, d[0], t) for n, d, t in zip(all_names, all_references, all_translations)]
         
         return bleu_tuple, av_loss, translations[:max_translations]
+
+
 
 
 def argparse_basic_wrap(parser):
