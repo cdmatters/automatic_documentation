@@ -27,12 +27,13 @@ def get_weights_word2idx(vocab_size=100000):
 
     word2idx = { PAD_TOKEN: 0 }
     weights = []
-    with open("{}/glove/glove.42B.300d.txt".format(DIR), "r") as f:
+    with open("{}/glove/glove.42B.300d.txt".format(DIR), "r", encoding='utf-8') as f:
         for i, line in tqdm(enumerate(f)):
             values = line.split()
 
             word = values[0]
-            word_weights = np.asarray(values[1:], dtype=np.float32)
+            word_weights = np.array(values[1:]).astype(np.float32)
+
             word2idx[word] = i + 1
             weights.append(word_weights)
 
@@ -41,7 +42,6 @@ def get_weights_word2idx(vocab_size=100000):
 
     embed_dim = len(weights[0])
     weights.insert(0, np.random.randn(embed_dim))
-
 
     word2idx[UNKNOWN_TOKEN] = len(weights)
     weights.append(np.random.randn(embed_dim))

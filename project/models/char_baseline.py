@@ -133,7 +133,9 @@ class CharSeqBaseline(BasicRNNModel):
                         plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
 
                     plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
-                    plogging.save(session, log_dir, self.name, i)
+                    
+                    if i > 0:
+                        plogging.save(session, log_dir, self.name, i)
         except KeyboardInterrupt as e:
             plogging.save(session, log_dir, self.name, i)
 
