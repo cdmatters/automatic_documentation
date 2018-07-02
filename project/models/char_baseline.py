@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
@@ -118,26 +119,37 @@ class CharSeqBaseline(BasicRNNModel):
             self.inference_id = inf_translate
 
 
-    def main(self, session, epochs, train_data, log_dir, filewriters, test_data=None, test_check=20, test_translate=0):
+    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
         try:
-            for i, (arg_name, arg_desc) in enumerate(self._to_batch(*train_data, epochs)):
+            recent_losses = [1e8, 1e8, 1e8, 1e8] # should use a queue
+            for i, (arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
 
                 ops = [self.update, self.train_loss, self.train_id, self.merged_metrics]
                 _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops)
                 filewriters["train_continuous"].add_summary(train_summary, i)
 
                 if i % test_check == 0:
-                    evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)
+                    evaluation_tuple = self.evaluate_bleu(session, data_tuple.train, max_points=10000)
                     plogging.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
 
-                    if test_data is not None:
-                        test_evaluation_tuple = self.evaluate_bleu(session, test_data, max_points=10000)
-                        plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
+                    valid_evaluation_tuple = self.evaluate_bleu(session, data_tuple.valid, max_points=10000)
+                    plogging.log_tensorboard(filewriters['valid'], i, *valid_evaluation_tuple)
 
-                    plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
+                    test_evaluation_tuple = self.evaluate_bleu(session, data_tuple.test, max_points=10000)
+                    plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
+
+                    plogging.log_std_out(i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
 
                     if i > 0:
                         saveload.save(session, log_dir, self.name, i)
+
+                    recent_losses.append(valid_evaluation_tuple[-2])
+                    if np.argmin(recent_losses) == 0:
+                        return
+                    else:
+                        recent_losses.pop(0)
+
+
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
@@ -176,12 +188,13 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     filewriters = {
         'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
         'train': tf.summary.FileWriter('logs/{}/train'.format(log_str), sess.graph),
+        'valid': tf.summary.FileWriter('logs/{}/valid'.format(log_str)),
         'test': tf.summary.FileWriter('logs/{}/test'.format(log_str))
     }
 
     sess.run(init)
     # plogging.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
-    nn.main(sess, epochs, data_tuple.train, log_str, filewriters, data_tuple.test,
+    nn.main(sess, epochs, data_tuple, log_str, filewriters,
             test_check=test_freq, test_translate=test_translate)
 
 

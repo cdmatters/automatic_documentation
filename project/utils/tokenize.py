@@ -111,15 +111,15 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq,
 
     print("Tokenizing the word desctiptions and characters")
     train_data = tokenize_descriptions(data_tuple.train, word2idx, char2idx)
-    test_data = tokenize_descriptions(data_tuple.valid, word2idx, char2idx)
-    valid_data = tokenize_descriptions(data_tuple.test, word2idx, char2idx)
+    valid_data = tokenize_descriptions(data_tuple.valid, word2idx, char2idx)
+    test_data = tokenize_descriptions(data_tuple.test, word2idx, char2idx)
 
     print("Extracting tensors train and test")
     train_data = extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
-    test_data = extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
     valid_data = extract_char_and_desc_idx_tensors(valid_data, char_seq, desc_seq)
+    test_data = extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
 
-    return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, test_data, valid_data, "Tensors")
+    return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, valid_data, test_data, "Tensors")
 
 
 if __name__ == '__main__':
