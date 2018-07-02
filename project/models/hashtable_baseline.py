@@ -7,7 +7,7 @@ import nltk
 
 from project.external.nmt import bleu
 from project.models.base_model import ExperimentSummary, SingleTranslation
-import project.utils.args as args
+from project.utils import args, tokenize
 
 default_dict_factory = lambda : defaultdict(list) 
 
@@ -80,21 +80,14 @@ class HashtableBaseline(object):
 
 
 def _run_model( vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset):
-    if use_full_dataset:
-        if use_split_dataset:
-            from project.data.preprocessed import main_data_split as DATA
-        else:
-            from project.data.preprocessed import main_data as DATA
-    else:
-        from project.data.preprocessed.overfit import overfit_data as DATA
-
- 
+    data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset)
+    
     model = HashtableBaseline()
     
     summary = ExperimentSummary(model, vocab_size, char_seq, desc_seq, use_full_dataset)
     print(summary)
 
-    model.main(DATA.train, DATA.test) 
+    model.main(data_tuple.train, data_tuple.test) 
 
     # filewriters = {
     #     'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),

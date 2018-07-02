@@ -5,6 +5,7 @@ import nltk
 import numpy as np
 from tqdm import tqdm
 
+from project.data.preprocessed import DataTuple
 
 PAD_TOKEN = '<PAD>'
 UNKNOWN_TOKEN = '<UNK>'
@@ -89,16 +90,19 @@ def extract_char_and_desc_idx_tensors(data, char_dim, desc_dim):
         descs.append(np.array(desc_pad))
     return np.stack(chars), np.stack(descs)
 
-def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq,
-                                   use_full_dataset, use_split_dataset):
+def get_data_tuple(use_full_dataset, use_split_dataset):
     if use_full_dataset:
         if use_split_dataset:
-            from project.data.preprocessed import main_data_split as DATA
+            from project.data.preprocessed.split import split_data as data
         else:
-            from project.data.preprocessed import main_data as DATA
+            from project.data.preprocessed.unsplit import unsplit_data as data
     else:
-        from project.data.preprocessed.overfit import overfit_data as DATA
-    from project.data.preprocessed import DataTuple
+        from project.data.preprocessed.overfit import overfit_data as data
+    return data
+
+def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq,
+                                   use_full_dataset, use_split_dataset):
+    data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = get_weights_word2idx(vocab_size)
@@ -106,18 +110,20 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq,
     char_weights, char2idx = get_weights_char2idx()
 
     print("Tokenizing the word desctiptions and characters")
-    train_data = tokenize_descriptions(DATA.train, word2idx, char2idx)
-    test_data = tokenize_descriptions(DATA.test, word2idx, char2idx)
+    train_data = tokenize_descriptions(data_tuple.train, word2idx, char2idx)
+    test_data = tokenize_descriptions(data_tuple.valid, word2idx, char2idx)
+    valid_data = tokenize_descriptions(data_tuple.test, word2idx, char2idx)
 
     print("Extracting tensors train and test")
     train_data = extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
     test_data = extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
+    valid_data = extract_char_and_desc_idx_tensors(valid_data, char_seq, desc_seq)
 
-    return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train=train_data, test=test_data)
+    return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, test_data, valid_data, "Tensors")
 
 
 if __name__ == '__main__':
-    from project.data.preprocessed.overfit import data as DATA
+    from project.data.preprocessed.overfit import overfit_data as DATA
 
     weights, word2idx = get_weights_word2idx()
     char_weights, char2idx = get_weights_char2idx()

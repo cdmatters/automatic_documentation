@@ -117,14 +117,11 @@ def prep_main_set(test_percentage):
 
     n = len(main_data)
     print("Training Data Size: ", n)
-    test = main_data[:int(n * test_percentage)]
-    train = main_data[int(n * test_percentage):]
+    test_data = main_data[:int(n * test_percentage)]
+    train_data = main_data[int(n * test_percentage):]
 
-    with open(PREPROCESSDATADIR+"/main_train.yaml", 'w') as f:
-        f.write(yaml.dump(train, Dumper=CDumper))
-    with open(PREPROCESSDATADIR+"/main_test.yaml", 'w') as f:
-        f.write(yaml.dump(test, Dumper=CDumper))
-
+    preprocessed.save_data(train_data, test_data, 'unsplit')
+    
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
@@ -143,10 +140,8 @@ def prep_overfit_set(test_percentage):
     test = overfit_data[:int(n * test_percentage)]
     train = overfit_data[int(n * test_percentage):]
 
-    with open(PREPROCESSDATADIR+"/overfit/train.yaml", 'w') as f:
-        f.write(yaml.dump(train, Dumper=CDumper))
-    with open(PREPROCESSDATADIR+"/overfit/test.yaml", 'w') as f:
-        f.write(yaml.dump(test, Dumper=CDumper))
+    preprocessed.save_data(train, test, 'overfit')
+    
 
 def prep_repo_split_set(test_percentage):
     '''Prepare a data set with training and test data from different repositories'''
@@ -183,6 +178,9 @@ def prep_repo_split_set(test_percentage):
     
     train_data = map_yaml_to_arg_list(train_set)
     test_data = map_yaml_to_arg_list(test_set)
+
+    random.shuffle(train_data)
+    random.shuffle(test_data)
     
     
     print("Test Args: {}".format(len(test_data)))
@@ -190,24 +188,20 @@ def prep_repo_split_set(test_percentage):
     print("Test Fraction: {:4f}".format(
         len(test_data)/(len(test_data) + len(train_data))))
 
-    with open(PREPROCESSDATADIR+"/split_repo_train.yaml", 'w') as f:
-        f.write(yaml.dump(train_data, Dumper=CDumper))
-    with open(PREPROCESSDATADIR+"/split_repo_test.yaml", 'w') as f:
-        f.write(yaml.dump(test_data, Dumper=CDumper))
+    preprocessed.save_data(train_data, test_data, 'split')
     
-
 def _build_argparser():
     parser = argparse.ArgumentParser(description='Preprocess your raw Bonaparte data into formats that can be used')
     parser.add_argument('--assimilate', '-a', dest='assimilate', action='store_true',
                         default=False, help='collect all individual yaml files and assimilate into master yaml (must be fone before prepping data sets)')
     parser.add_argument('--prep_overfit', '-o', dest='overfit_set', action='store_true',
                         default=False, help='prepare an overfit dataset from the assimilated yaml')
-    parser.add_argument('--prep_data', '-d', dest='data_set', action='store_true',
-                        default=False, help='prep an main dataset from the assimilated yamls')
+    parser.add_argument('--prep_combined_repos', '-c', dest='unsplit_set', action='store_true',
+                        default=False, help='prep datasets with train and test from combined repositories')
+    parser.add_argument('--prep_separate_repos', '-s', dest='sep_repos', action='store_true',
+                        default=False, help='prepare data sets with train and test from different repositories')
     parser.add_argument('--run-all', '-r', dest='run_all', action='store_true',
                         default=False, help='assimilate and prep both main and overfit datasets')    
-    parser.add_argument('--separate_repos', '-s', dest='sep_repos', action='store_true',
-                        default=False, help='prepare data sets with train and test from different repositories')
 
     return parser
 
@@ -216,17 +210,17 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.run_all:
         assimilate_data()
-        prep_main_set(0.25)
-        prep_overfit_set(0.25)
-        prep_repo_split_set(0.25)
+        prep_main_set(0.3)
+        prep_overfit_set(0.3)
+        prep_repo_split_set(0.3)
     else:
         if args.assimilate:
             assimilate_data()
-        if args.data_set:
-            prep_main_set(0.25)
+        if args.unsplit_set:
+            prep_main_set(0.3)
         if args.overfit_set:
-            prep_overfit_set(0.25)
+            prep_overfit_set(0.3)
         if args.sep_repos:
-            prep_repo_split_set(0.25)
+            prep_repo_split_set(0.3)
     if not any(vars(args).values()):
         parser.print_help()
