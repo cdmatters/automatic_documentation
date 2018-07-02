@@ -153,23 +153,6 @@ def _build_argparser():
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, test_translate, epochs, logdir):
-    # if use_full_dataset:
-    #     from project.data.preprocessed import main_data as DATA
-    # else:
-    #     from project.data.preprocessed.overfit import overfit_data as DATA
-
-    # print("Loading GloVe weights and word to index lookup table")
-    # word_weights, word2idx = tokenize.get_weights_word2idx(vocab_size)
-    # print("Creating char to index look up table")
-    # char_weights, char2idx = tokenize.get_weights_char2idx()
-
-    # print("Tokenizing the word desctiptions and characters")
-    # train_data = tokenize.tokenize_descriptions(DATA.train, word2idx, char2idx)
-    # test_data = tokenize.tokenize_descriptions(DATA.test, word2idx, char2idx)
-    
-    # print("Extracting tensors train and test")
-    # train_data = tokenize.extract_char_and_desc_idx_tensors(train_data, char_seq, desc_seq)
-    # test_data = tokenize.extract_char_and_desc_idx_tensors(test_data, char_seq, desc_seq)
     
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
                                    vocab_size, char_seq, desc_seq, use_full_dataset)
