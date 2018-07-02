@@ -33,6 +33,10 @@ class HashtableBaseline(object):
                 descriptions.extend(self.lookup_list[i][n])     
             if descriptions:
                 break
+
+        if not descriptions: # not even 1-gram!
+            all_d_indices = range(len(self.descriptions))
+            descriptions.append(random.choice(all_d_indices))
         return descriptions
 
     def tok(self, word):
@@ -65,14 +69,22 @@ class HashtableBaseline(object):
         references = [[t.description] for t in all_translations]
         translations = [t.translation for t in all_translations]
 
-        bleu_tuple = bleu.compute_bleu(references, translations, max_order=4, smooth=False)
-        print(bleu_tuple[0] * 100)
+        return bleu.compute_bleu(references, translations, max_order=4, smooth=False)
+
+    def main(self, train_data, test_data):
+        self.train(train_data)
+        translations = self.test(test_data)
+        bleu_tuple = self.evaluate(translations)
+        print(bleu_tuple[0]*100)
 
 
 
-def _run_model( vocab_size, char_seq, desc_seq, use_full_dataset):
+def _run_model( vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset):
     if use_full_dataset:
-        from project.data.preprocessed import main_data as DATA
+        if use_split_dataset:
+            from project.data.preprocessed import main_data_split as DATA
+        else:
+            from project.data.preprocessed import main_data as DATA
     else:
         from project.data.preprocessed.overfit import overfit_data as DATA
 
@@ -80,11 +92,10 @@ def _run_model( vocab_size, char_seq, desc_seq, use_full_dataset):
     model = HashtableBaseline()
     
     summary = ExperimentSummary(model, vocab_size, char_seq, desc_seq, use_full_dataset)
-    print(summary) 
+    print(summary)
 
-    model.train(DATA.train)
-    translations = model.test(DATA.test)
-    model.evaluate(translations)
+    model.main(DATA.train, DATA.test) 
+
     # filewriters = {
     #     'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
     #     'train': tf.summary.FileWriter('logs/{}/train'.format(log_str), sess.graph),

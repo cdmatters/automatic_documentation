@@ -16,7 +16,10 @@ def data_args(parse_fn):
                         help='max desecription sequence length')
         p.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
                         default=False,
-                        help='dump extensive test information on each test batch')
+                        help='use the complete data set (slow)')
+        p.add_argument('--use-split-dataset', '-S', dest='use_split_dataset', action='store_true',
+                        default=False,
+                        help='use the dataset where train and test args are split by codebase')
         return p
     return wrapper
 
