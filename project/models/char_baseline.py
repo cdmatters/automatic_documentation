@@ -27,26 +27,26 @@ class CharSeqBaseline(BasicRNNModel):
         self.input_data_sequence = None
         self.input_label_sequence = None
         self.update = None
-        
+
         self.train_loss = None
-        self.train_id = None        
-        
+        self.train_id = None
+
         self.inference_loss = None
         self.inference_id = None
-        
+
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
-        
+
         print("Init loaded")
 
     def arg_summary(self):
         mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
             self.rnn_size, self.learning_rate, self.batch_size)
-        
+
         data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, ".format(
             len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1])
         return "\n".join([mod_args, data_args])
-    
+
     def _log_in_tensorboard(self):
         tf.summary.scalar('loss', self.train_loss)
         return tf.summary.merge_all()
@@ -78,7 +78,7 @@ class CharSeqBaseline(BasicRNNModel):
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
                 self.rnn_size, encoder_outputs,
                 memory_sequence_length=input_data_seq_length)
-            
+
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism,
                 attention_layer_size=self.rnn_size)
@@ -92,13 +92,13 @@ class CharSeqBaseline(BasicRNNModel):
                                                     state,projection_layer, decoder_weights,
                                                     self.word2idx[START_OF_TEXT_TOKEN],
                                                     self.word2idx[END_OF_TEXT_TOKEN])
-            
+
 
             # 5. Define Train Loss
             train_logits = train_outputs.rnn_output
             train_loss = self._get_loss(train_logits, input_label_sequence, input_label_seq_length)
             train_translate = train_outputs.sample_id
-            
+
             # 6. Define Translation
             inf_logits = inf_outputs.rnn_output
             inf_translate = inf_outputs.sample_id
@@ -127,7 +127,7 @@ class CharSeqBaseline(BasicRNNModel):
                 filewriters["train_continuous"].add_summary(train_summary, i)
 
                 if i % test_check == 0:
-                    evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)                    
+                    evaluation_tuple = self.evaluate_bleu(session, train_data, max_points=10000)
                     plogging.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
 
                     if test_data is not None:
@@ -135,7 +135,7 @@ class CharSeqBaseline(BasicRNNModel):
                         plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
 
                     plogging.log_std_out(i, evaluation_tuple, test_evaluation_tuple)
-                    
+
                     if i > 0:
                         saveload.save(session, log_dir, self.name, i)
         except KeyboardInterrupt as e:
@@ -152,12 +152,14 @@ def _build_argparser():
     return parser
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
-                    test_freq, use_full_dataset, test_translate, epochs, logdir):
-    
+                    test_freq, use_full_dataset, use_split_dataset,
+                    test_translate, epochs, logdir):
+
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
-                                   vocab_size, char_seq, desc_seq, use_full_dataset)
+                                   vocab_size, char_seq, desc_seq, use_full_dataset,
+                                   use_split_dataset)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr)
-    
+
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
     print(summary)
 
@@ -169,7 +171,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
 
     sess = tf.Session(config=session_conf)
 
-    
+
     log_str =  logdir + '_' + datetime.strftime(datetime.now(), '%d%m_%H%M%S')
     filewriters = {
         'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
@@ -179,7 +181,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
 
     sess.run(init)
     # plogging.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
-    nn.main(sess, epochs, data_tuple.train, log_str, filewriters, data_tuple.test, 
+    nn.main(sess, epochs, data_tuple.train, log_str, filewriters, data_tuple.test,
             test_check=test_freq, test_translate=test_translate)
 
 
