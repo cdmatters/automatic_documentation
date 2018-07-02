@@ -12,10 +12,10 @@ Constructor.add_constructor(u'tag:yaml.org,2002:bool', add_bool)
 
 DataTuple = namedtuple("DataTuple", ["train","test"])
 
-def load_main():
+def load_main(prefix):
     dirname = os.path.dirname(os.path.abspath(__file__))
-    train_file = '{}/main_train.yaml'.format(dirname)
-    test_file = '{}/main_test.yaml'.format(dirname)
+    train_file = '{}/{}_train.yaml'.format(dirname, prefix)
+    test_file = '{}/{}_test.yaml'.format(dirname, prefix)
 
     if os.path.isfile(train_file) and  os.path.isfile(test_file):
         with open(train_file, 'r') as f:
@@ -26,7 +26,6 @@ def load_main():
     else:
         return None
 
-
-
-main_data = load_main()
+main_data = load_main('main')
+main_data_split = load_main('split_repo')
 

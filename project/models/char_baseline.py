@@ -170,7 +170,7 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     sess = tf.Session(config=session_conf)
 
     
-    log_str =  logdir + '_' + datetime.strftime(datetime.now(), '%m%y_%H%M%S')
+    log_str =  logdir + '_' + datetime.strftime(datetime.now(), '%d%m_%H%M%S')
     filewriters = {
         'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
         'train': tf.summary.FileWriter('logs/{}/train'.format(log_str), sess.graph),
