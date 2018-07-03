@@ -38,9 +38,9 @@ def log_std_out(i, eval_tuple, valid_eval_tuple, test_eval_tuple):
     test_log = build_translation_log_string("TEST", *test_eval_tuple)
     summary = build_summary_log_string(i, eval_tuple, valid_eval_tuple, test_eval_tuple)
 
-    print(train_log)
-    print(test_log)
-    print(summary)
+    print(train_log.encode("utf-8"))
+    print(test_log.encode("utf-8"))
+    print(summary.encode("utf-8"))
 
     sys.stdout.flush() # remove when adding a logger
 

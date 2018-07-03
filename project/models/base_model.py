@@ -12,24 +12,24 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 
 
 EXPERIMENT_SUMMARY_STRING = '''
---------------------------------------------
---------------------------------------------
-DATA: vocab_size: {vocab}, char_seq: {char},
-       desc_seq: {desc}, full_dataset: {full}
---------------------------------------------
+------------------------------------------------------
+------------------------------------------------------
+DATA: vocab_size: {vocab}, char_seq: {char}, desc_seq: {desc},
+       full_dataset: {full}, split_dataset: {split}
+------------------------------------------------------
 {nn}
---------------------------------------------
---------------------------------------------
+------------------------------------------------------
+------------------------------------------------------
 '''
 
 SingleTranslation = namedtuple("Translation", ['name', 'description', 'translation'])
 SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
                                         s.name, " ".join(s.description), " ".join(s.translation))
 
-ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq','full_dataset'])
+ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq','full_dataset', 'split_dataset'])
 ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
                                             vocab=s.vocab, char=s.char_seq, desc=s.desc_seq, 
-                                            full=s.full_dataset, nn=s.nn)
+                                            full=s.full_dataset, nn=s.nn, split=s.split_dataset)
 
 
 class BasicRNNModel(abc.ABC):
@@ -113,11 +113,16 @@ class BasicRNNModel(abc.ABC):
             return encode_embedded, decode_embedded, char_embedding, word_embedding
 
     @staticmethod
-    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded):
+    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout):
         with tf.name_scope("encoder"):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(rnn_size, name="RNNencoder")
             initial_state = encoder_rnn_cell.zero_state(batch_size, dtype=tf.float32)
+
+            if dropout > 0:
+                keep_prob = 1 - dropout
+                encoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell,
+                    state_keep_prob=keep_prob)
 
             return tf.nn.dynamic_rnn(encoder_rnn_cell, encode_embedded,
                                         sequence_length=input_data_seq_length,

@@ -53,6 +53,8 @@ def train_args(parse_fn):
         p.add_argument('--batch-size', '-b', dest='batch_size', action='store',
                         type=int, default=128,
                         help='minibatch size for model')
-
+        p.add_argument('--dropout', '-dd', dest='dropout', action='store',
+                        type=float, default=0.3,
+                        help='minibatch size for model')
         return p
     return wrapper

@@ -84,7 +84,7 @@ def _run_model( vocab_size, char_seq, desc_seq, use_full_dataset, use_split_data
     
     model = HashtableBaseline()
     
-    summary = ExperimentSummary(model, vocab_size, char_seq, desc_seq, use_full_dataset)
+    summary = ExperimentSummary(model, vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset)
     print(summary)
 
     model.main(data_tuple.train, data_tuple.test) 

@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+import sys
 
 import numpy as np
 import tensorflow as tf
@@ -16,13 +17,14 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, name="BasicModel"):
+    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, dropout=0.3, name="BasicModel"):
         super().__init__(embed_tuple, name)
         # To Do; all these args from config, to make saving model easier.
 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.rnn_size = rnn_size
+        self.dropout = dropout
 
         # Graph Variables (built later)
         self.input_data_sequence = None
@@ -44,8 +46,8 @@ class CharSeqBaseline(BasicRNNModel):
         mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
             self.rnn_size, self.learning_rate, self.batch_size)
 
-        data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, ".format(
-            len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1])
+        data_args =  "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, dropout: {} ".format(
+            len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1], self.dropout)
         return "\n".join([mod_args, data_args])
 
     def _log_in_tensorboard(self):
@@ -68,7 +70,7 @@ class CharSeqBaseline(BasicRNNModel):
                                                     input_label_sequence, self.word_weights)
 
             # 2. Build out Encoder
-            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded)
+            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded, self.dropout)
 
             # 3. Build out Cell ith attention
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="RNNencoder")
@@ -165,15 +167,17 @@ def _build_argparser():
 
 def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
                     test_freq, use_full_dataset, use_split_dataset,
-                    test_translate, epochs, logdir):
+                    test_translate, epochs, logdir, dropout, **kwargs):
 
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
                                    vocab_size, char_seq, desc_seq, use_full_dataset,
                                    use_split_dataset)
-    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr)
+    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
 
-    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset)
+    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset)
     print(summary)
+    sys.stdout.flush() 
+
 
 
     init = tf.group(tf.global_variables_initializer(), tf.local_variables_initializer())
