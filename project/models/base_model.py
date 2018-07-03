@@ -50,6 +50,7 @@ class BasicRNNModel(abc.ABC):
 
         self.input_data_sequence = None
         self.input_label_sequence = None
+        self.dropout_tensor = None
         self.update = None
         
         self.train_loss = None
@@ -113,16 +114,17 @@ class BasicRNNModel(abc.ABC):
             return encode_embedded, decode_embedded, char_embedding, word_embedding
 
     @staticmethod
-    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout):
+    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
         with tf.name_scope("encoder"):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(rnn_size, name="RNNencoder")
             initial_state = encoder_rnn_cell.zero_state(batch_size, dtype=tf.float32)
 
-            if dropout > 0:
-                keep_prob = 1 - dropout
-                encoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell,
-                    state_keep_prob=keep_prob)
+             
+            encoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell,
+                    input_keep_prob=dropout_keep_prob,
+                    output_keep_prob=dropout_keep_prob,
+                    state_keep_prob=dropout_keep_prob)
 
             return tf.nn.dynamic_rnn(encoder_rnn_cell, encode_embedded,
                                         sequence_length=input_data_seq_length,
@@ -215,7 +217,7 @@ class BasicRNNModel(abc.ABC):
             return [lookup[i] for i in translate_id]
 
 
-    def _feed_fwd(self, session, input_data, input_labels, operation):
+    def _feed_fwd(self, session, input_data, input_labels, operation, mode=None):
         """
         Evaluates a node in the graph
         Args
@@ -229,6 +231,8 @@ class BasicRNNModel(abc.ABC):
         run_ouputs = operation
         feed_dict = {self.input_data_sequence: input_data,
                      self.input_label_sequence: input_labels}
+        if mode == 'TRAIN':
+            feed_dict[self.dropout_keep_prob] = 1 - self.dropout
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 

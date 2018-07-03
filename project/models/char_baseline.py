@@ -63,14 +63,15 @@ class CharSeqBaseline(BasicRNNModel):
             # # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
             input_label_seq_length = tf.argmin(input_label_sequence, axis=1, output_type=tf.int32) + 1
-
+            dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
+            
             # 1. Get Embeddings
             encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
                                                     input_data_sequence, self.char_weights,
                                                     input_label_sequence, self.word_weights)
 
             # 2. Build out Encoder
-            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded, self.dropout)
+            encoder_outputs, state = self._build_rnn_encoder(input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
 
             # 3. Build out Cell ith attention
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(self.rnn_size, name="RNNencoder")
@@ -81,6 +82,12 @@ class CharSeqBaseline(BasicRNNModel):
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
                 self.rnn_size, encoder_outputs,
                 memory_sequence_length=input_data_seq_length)
+
+            decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(decoder_rnn_cell,
+                    input_keep_prob=dropout_keep_prob,
+                    output_keep_prob=dropout_keep_prob,
+                    state_keep_prob=dropout_keep_prob)
+
 
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism,
@@ -113,6 +120,7 @@ class CharSeqBaseline(BasicRNNModel):
             # 8. Save Variables to Model
             self.input_data_sequence = input_data_sequence
             self.input_label_sequence = input_label_sequence
+            self.dropout_keep_prob = dropout_keep_prob
             self.update = update
             self.train_loss = train_loss
             self.train_id = train_translate
@@ -127,7 +135,7 @@ class CharSeqBaseline(BasicRNNModel):
             for i, (arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
 
                 ops = [self.update, self.train_loss, self.train_id, self.merged_metrics]
-                _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops)
+                _,  _, train_id, train_summary = self._feed_fwd(session, arg_name, arg_desc, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
 
                 if i % test_check == 0:
