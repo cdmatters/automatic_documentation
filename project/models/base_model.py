@@ -15,6 +15,7 @@ EXPERIMENT_SUMMARY_STRING = '''
 ------------------------------------------------------
 ------------------------------------------------------
 DATA: vocab_size: {vocab}, char_seq: {char}, desc_seq: {desc},
+       char_embed: {c_embed}, desc_embed: {d_embed},
        full_dataset: {full}, split_dataset: {split}
 ------------------------------------------------------
 {nn}
@@ -26,10 +27,11 @@ SingleTranslation = namedtuple("Translation", ['name', 'description', 'translati
 SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
                                         s.name, " ".join(s.description), " ".join(s.translation))
 
-ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq','full_dataset', 'split_dataset'])
+ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 'desc_seq', 'char_embed', 'desc_embed','full_dataset', 'split_dataset'])
 ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
                                             vocab=s.vocab, char=s.char_seq, desc=s.desc_seq, 
-                                            full=s.full_dataset, nn=s.nn, split=s.split_dataset)
+                                            full=s.full_dataset, nn=s.nn, split=s.split_dataset,
+                                            c_embed=s.char_embed, d_embed=d.desc_embed)
 
 
 class BasicRNNModel(abc.ABC):

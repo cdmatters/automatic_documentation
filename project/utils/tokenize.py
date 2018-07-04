@@ -100,7 +100,7 @@ def get_data_tuple(use_full_dataset, use_split_dataset):
         from project.data.preprocessed.overfit import overfit_data as data
     return data
 
-def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq,
+def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                    use_full_dataset, use_split_dataset):
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
 

@@ -180,17 +180,19 @@ def _build_argparser():
 
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs, 
-               vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, **kwargs):
+               vocab_size, char_seq, desc_seq, char_embed, desc_embed,
+               use_full_dataset, use_split_dataset, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
-    saveload.setup_saver(-1)
+    saveload.setup_saver(save_every)
     
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
-                                   vocab_size, char_seq, desc_seq, use_full_dataset,
-                                   use_split_dataset)
+                                   vocab_size, char_seq, desc_seq, char_embed, desc_embed,
+                                   use_full_dataset, use_split_dataset)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
 
-    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset)
+    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed, 
+                               use_full_dataset, use_split_dataset)
     
     LOGGER.warning("Printing to {}".format(log_path))
     LOGGER.multiline_info(summary)
