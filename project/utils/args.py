@@ -19,24 +19,29 @@ def data_args(parse_fn):
                         help='use the complete data set (slow)')
         p.add_argument('--use-split-dataset', '-S', dest='use_split_dataset', action='store_true',
                         default=False,
-                        help='use the dataset where train and test args are split by codebase')
+                        help='use the dataset where train and test args are split by codebase. must be used with full dataset')
         return p
     return wrapper
-
 
 def log_args(parse_fn):
     @wraps(parse_fn)
     def wrapper(*args, **kwds):
         p = parse_fn(*args, **kwds)
-        p.add_argument('--test-freq', '-t', dest='test_freq', action='store',
+        p.add_argument('--name', '-N', dest='name', action='store',
+                        type=str, default='model',
+                        help='name of the model')
+        p.add_argument('--logdir', '-L', dest='logdir', action='store',
+                        type=str, default='logs',
+                        help='directory for storing logs and raw experiment runs')
+        p.add_argument('--test-freq', '-T', dest='test_freq', action='store',
                         type=int, default=100,
                         help='how often to run a test and dump output')
         p.add_argument('--dump-translation', '-D', dest='test_translate', action='store',
                         type=int, default=5,
                         help='dump extensive test information on each test batch')
-        p.add_argument('--logdir', '-L', dest='logdir', action='store',
-                        type=str, default='logdir',
-                        help='directory for storing logs and raw experiment runs')
+        p.add_argument('--save-every', '-E', dest='save_every', action='store',
+                        type=int, default=5,
+                        help='how often to save every run')
         return p
     return wrapper
 

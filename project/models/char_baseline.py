@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+import logging
 import sys
 
 import numpy as np
@@ -9,11 +10,15 @@ from tensorflow.python.layers import core as layers_core
 from project.models.base_model import BasicRNNModel, ExperimentSummary, \
                                         argparse_basic_wrap
 import project.utils.args as args
-import project.utils.logging as plogging
+import project.utils.logging as log_util
 import project.utils.saveload as saveload
 import project.utils.tokenize as tokenize
 from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
                                START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+
+
+LOGGER = logging.getLogger('')
+
 
 class CharSeqBaseline(BasicRNNModel):
 
@@ -40,7 +45,7 @@ class CharSeqBaseline(BasicRNNModel):
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
 
-        print("Init loaded")
+        LOGGER.debug("Init loaded")
 
     def arg_summary(self):
         mod_args =  "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
@@ -140,15 +145,15 @@ class CharSeqBaseline(BasicRNNModel):
 
                 if i % test_check == 0:
                     evaluation_tuple = self.evaluate_bleu(session, data_tuple.train, max_points=10000)
-                    plogging.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
+                    log_util.log_tensorboard(filewriters['train'], i, *evaluation_tuple)
 
                     valid_evaluation_tuple = self.evaluate_bleu(session, data_tuple.valid, max_points=10000)
-                    plogging.log_tensorboard(filewriters['valid'], i, *valid_evaluation_tuple)
+                    log_util.log_tensorboard(filewriters['valid'], i, *valid_evaluation_tuple)
 
                     test_evaluation_tuple = self.evaluate_bleu(session, data_tuple.test, max_points=10000)
-                    plogging.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
+                    log_util.log_tensorboard(filewriters['test'], i, *test_evaluation_tuple)
 
-                    plogging.log_std_out(i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
+                    log_util.log_std_out(i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
 
                     if i > 0:
                         saveload.save(session, log_dir, self.name, i)
@@ -173,18 +178,22 @@ def _build_argparser():
                         help='size of LSTM size')
     return parser
 
-def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
-                    test_freq, use_full_dataset, use_split_dataset,
-                    test_translate, epochs, logdir, dropout, **kwargs):
-
+def _run_model(name, logdir, test_freq, test_translate, save_every,
+               lstm_size, dropout, lr, batch_size, epochs, 
+               vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, **kwargs):
+    log_path = log_util.to_log_path(logdir, name)
+    log_util.setup_logger(log_path)
+    saveload.setup_saver(-1)
+    
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
                                    vocab_size, char_seq, desc_seq, use_full_dataset,
                                    use_split_dataset)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
 
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset)
-    print(summary)
-    sys.stdout.flush() 
+    
+    LOGGER.warning("Printing to {}".format(log_path))
+    LOGGER.multiline_info(summary)
 
 
 
@@ -192,21 +201,13 @@ def _run_model(lstm_size, lr, batch_size, vocab_size, char_seq, desc_seq,
     session_conf = tf.ConfigProto(
                intra_op_parallelism_threads=4,
                inter_op_parallelism_threads=4)
-
     sess = tf.Session(config=session_conf)
 
-
-    log_str =  logdir + '_' + datetime.strftime(datetime.now(), '%d%m_%H%M%S')
-    filewriters = {
-        'train_continuous':  tf.summary.FileWriter('logs/{}/train_continuous'.format(log_str), sess.graph),
-        'train': tf.summary.FileWriter('logs/{}/train'.format(log_str), sess.graph),
-        'valid': tf.summary.FileWriter('logs/{}/valid'.format(log_str)),
-        'test': tf.summary.FileWriter('logs/{}/test'.format(log_str))
-    }
+    filewriters = log_util.get_filewriters(log_path, sess)
 
     sess.run(init)
-    # plogging.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
-    nn.main(sess, epochs, data_tuple, log_str, filewriters,
+    # log_util.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
+    nn.main(sess, epochs, data_tuple, log_path, filewriters,
             test_check=test_freq, test_translate=test_translate)
 
 
