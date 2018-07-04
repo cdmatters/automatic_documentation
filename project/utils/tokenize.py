@@ -14,9 +14,9 @@ END_OF_TEXT_TOKEN = '<END>'
 
 EmbedTuple = namedtuple("EmbedTuple", ['word_weights', 'word2idx', 'char_weights','char2idx'])
 
-def get_weights_char2idx():
+def get_weights_char2idx(char_embed):
     # Weights are random, 300d
-    dim = 300
+    dim = char_embed
     arg_alphabet = 'abcdefghijklmnopqrstuvwyxzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_*:'
 
     char2idx = {a:i+1 for i,a in enumerate(arg_alphabet)} # ':' is a stop token
@@ -25,13 +25,21 @@ def get_weights_char2idx():
     char_weights =np.random.uniform(low=-0.1, high=0.1, size=[len(arg_alphabet)+1, dim])
     return (char_weights, char2idx)
 
-def get_weights_word2idx(vocab_size=100000):
+def get_weights_word2idx(desc_embed, vocab_size=100000):
     # Currently get the 300d embeddings from GloVe
     DIR = os.path.dirname(os.path.abspath(__file__))
 
     word2idx = { PAD_TOKEN: 0 }
     weights = []
-    with open("{}/glove/glove.42B.300d.txt".format(DIR), "r", encoding='utf-8') as f:
+
+    embed_files = {
+        50:"{}/glove/glove.6B.50d.txt".format(DIR),
+        100:"{}/glove/glove.6B.100d.txt".format(DIR),
+        200:"{}/glove/glove.6B.200d.txt".format(DIR),
+        300:"{}/glove/glove.6B.300d.txt".format(DIR),
+    }
+
+    with open(embed_files[desc_embed], "r", encoding='utf-8') as f:
         for i, line in tqdm(enumerate(f)):
             values = line.split()
 
@@ -105,9 +113,9 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
 
     print("Loading GloVe weights and word to index lookup table")
-    word_weights, word2idx = get_weights_word2idx(vocab_size)
+    word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size)
     print("Creating char to index look up table")
-    char_weights, char2idx = get_weights_char2idx()
+    char_weights, char2idx = get_weights_char2idx(char_embed)
 
     print("Tokenizing the word desctiptions and characters")
     train_data = tokenize_descriptions(data_tuple.train, word2idx, char2idx)
@@ -126,7 +134,7 @@ if __name__ == '__main__':
     from project.data.preprocessed.overfit import overfit_data as DATA
 
     weights, word2idx = get_weights_word2idx()
-    char_weights, char2idx = get_weights_char2idx()
+    char_weights, char2idx = get_weights_char2idx(200)
     data = tokenize_descriptions(DATA.test, word2idx, char2idx)
     print(data[0])
 

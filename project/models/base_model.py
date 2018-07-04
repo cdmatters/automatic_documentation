@@ -31,7 +31,7 @@ ExperimentSummary = namedtuple("ExperimentSummary", ['nn', 'vocab', 'char_seq', 
 ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
                                             vocab=s.vocab, char=s.char_seq, desc=s.desc_seq, 
                                             full=s.full_dataset, nn=s.nn, split=s.split_dataset,
-                                            c_embed=s.char_embed, d_embed=d.desc_embed)
+                                            c_embed=s.char_embed, d_embed=s.desc_embed)
 
 
 class BasicRNNModel(abc.ABC):

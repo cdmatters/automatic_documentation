@@ -14,6 +14,12 @@ def data_args(parse_fn):
         p.add_argument('--desc-seq', '-d', dest='desc_seq', action='store',
                         type=int, default=120,
                         help='max desecription sequence length')
+        p.add_argument('--char-embed', '-f', dest='char_embed', action='store',
+                        type=int, default=100,
+                        help='size of char embedding')
+        p.add_argument('--desc-embed', '-g', dest='desc_embed', action='store',
+                        type=int, default=100,
+                        help='size of glove embedding: 50, 100, 200 or 300')        
         p.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
                         default=False,
                         help='use the complete data set (slow)')
