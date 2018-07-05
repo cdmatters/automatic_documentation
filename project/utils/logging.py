@@ -54,12 +54,12 @@ def build_summary_log_string(i, train_eval_tuple, val_eval_tuple, test_eval_tupl
 def log_std_out(i, eval_tuple, valid_eval_tuple, test_eval_tuple):
     LOGGER.debug("---------------------------------------------")
     train_log = build_translation_log_string("TRAINING", *eval_tuple)
-    test_log = build_translation_log_string("TEST", *test_eval_tuple)
+    valid_log = build_translation_log_string("TEST", *valid_eval_tuple)
     summary = build_summary_log_string(
         i, eval_tuple, valid_eval_tuple, test_eval_tuple)
 
     LOGGER.multiline_debug(train_log)
-    LOGGER.multiline_debug(test_log)
+    LOGGER.multiline_debug(valid_log)
     LOGGER.multiline_info(summary)
 
 

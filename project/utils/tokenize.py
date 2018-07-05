@@ -13,6 +13,7 @@ START_OF_TEXT_TOKEN = '<START>'
 END_OF_TEXT_TOKEN = '<END>'
 SEPARATOR_1 = '<SEP-1>'
 SEPARATOR_2 = '<SEP-2>'
+SEPARATOR_3 = '<SEP-3>'
 
 
 EmbedTuple = namedtuple(
@@ -28,6 +29,7 @@ def get_weights_char2idx(char_embed):
     char2idx = {a: i+1 for i, a in enumerate(arg_alphabet)}
     char2idx[SEPARATOR_1] = len(char2idx.keys())
     char2idx[SEPARATOR_2] = len(char2idx.keys())
+    char2idx[SEPARATOR_3] = len(char2idx.keys())
     char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
 
     char_weights = np.random.uniform(
@@ -117,6 +119,54 @@ def fill_name_funcname_tok(d, char2idx):
     d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
 
 
+def fill_name_other_args_tok(d, char2idx):
+    d['arg_name_tokens'] = [c for c in d['arg_name']]
+    d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
+
+    d['arg_name_tokens'].append(SEPARATOR_1)
+    d['arg_name_idx'].append(char2idx[SEPARATOR_1])
+
+    for a in d["args"]:
+        if a == d['arg_name']:
+            continue
+        else:
+            d['arg_name_tokens'].extend([c for c in a])
+            d['arg_name_idx'].extend([char2idx[c] for c in a])
+
+            d['arg_name_tokens'].append(SEPARATOR_2)
+            d['arg_name_idx'].append(char2idx[SEPARATOR_2])
+
+    d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
+    d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
+
+
+def fill_name_funcname_other_args_tok(d, char2idx):
+    d['arg_name_tokens'] = [c for c in d['arg_name']]
+    d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
+
+    d['arg_name_tokens'].append(SEPARATOR_1)
+    d['arg_name_idx'].append(char2idx[SEPARATOR_1])
+
+    d['arg_name_tokens'].extend([c for c in d['name']])
+    d['arg_name_idx'].extend([char2idx[c] for c in d['name']])
+
+    d['arg_name_tokens'].append(SEPARATOR_2)
+    d['arg_name_idx'].append(char2idx[SEPARATOR_2])
+
+    for a in d["args"]:
+        if a == d['arg_name']:
+            continue
+        else:
+            d['arg_name_tokens'].extend([c for c in a])
+            d['arg_name_idx'].extend([char2idx[c] for c in a])
+
+            d['arg_name_tokens'].append(SEPARATOR_3)
+            d['arg_name_idx'].append(char2idx[SEPARATOR_3])
+
+    d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
+    d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
+
+
 def tokenize_vars_funcname_and_descriptions(data, word2idx, char2idx):
     for i, d in enumerate(data):
         fill_descriptions_tok(d, word2idx)
@@ -128,6 +178,20 @@ def tokenize_vars_and_descriptions(data, word2idx, char2idx):
     for i, d in enumerate(data):
         fill_descriptions_tok(d, word2idx)
         fill_name_tok(d, char2idx)
+    return data
+
+
+def tokenize_vars_other_args_and_descriptions(data, word2idx, char2idx):
+    for i, d in enumerate(data):
+        fill_descriptions_tok(d, word2idx)
+        fill_name_other_args_tok(d, char2idx)
+    return data
+
+
+def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx):
+    for i, d in enumerate(data):
+        fill_descriptions_tok(d, word2idx)
+        fill_name_funcname_other_args_tok(d, char2idx)
     return data
 
 
@@ -169,6 +233,10 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
         tokenize = tokenize_vars_and_descriptions
     elif tokenizer == 'var_funcname':
         tokenize = tokenize_vars_funcname_and_descriptions
+    elif tokenizer == 'var_otherargs':
+        tokenize = tokenize_vars_other_args_and_descriptions
+    elif tokenizer == 'var_funcname_otherargs':
+        tokenize = tokenize_vars_funcname_other_args_and_descriptions
 
     print("Tokenizing the word desctiptions and characters")
     train_data = tokenize(data_tuple.train, word2idx, char2idx)
@@ -182,14 +250,21 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
         valid_data, char_seq, desc_seq)
     test_data = extract_char_and_desc_idx_tensors(
         test_data, char_seq, desc_seq)
-
+    # print(train_data.shape)
     return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, valid_data, test_data, "Tensors")
 
 
 if __name__ == '__main__':
-    from project.data.preprocessed.overfit import overfit_data as DATA
+    # from project.data.preprocessed.overfit import overfit_data as DATA
 
-    weights, word2idx = get_weights_word2idx()
-    char_weights, char2idx = get_weights_char2idx(200)
-    data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
-    print(data[0])
+    # weights, word2idx = get_weights_word2idx()
+    # char_weights, char2idx = get_weights_char2idx(200)
+    # data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
+    
+    data = get_embed_tuple_and_data_tuple(vocab_size=5000, char_seq=550, desc_seq=300, 
+                                   char_embed=50, desc_embed=50,
+                                   use_full_dataset=True, use_split_dataset=False, tokenizer='var_funcname_otherargs')
+
+    char_tensor = data[1].train[0]
+    print(np.max(char_tensor, axis=0))
+    print(data[1].train[0].shape)

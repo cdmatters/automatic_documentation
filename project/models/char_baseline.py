@@ -142,7 +142,7 @@ class CharSeqBaseline(BasicRNNModel):
 
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
         try:
-            recent_losses = [1e8, 1e8, 1e8, 1e8]  # should use a queue
+            recent_losses = [1e8] * 10  # should use a queue
             for i, (arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
 
                 ops = [self.update, self.train_loss,
@@ -153,19 +153,20 @@ class CharSeqBaseline(BasicRNNModel):
 
                 if i % test_check == 0:
                     evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.train, max_points=10000)
+                        session, data_tuple.train, max_points=5000)
                     log_util.log_tensorboard(
                         filewriters['train'], i, *evaluation_tuple)
 
                     valid_evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.valid, max_points=10000)
+                        session, data_tuple.valid, max_points=5000)
                     log_util.log_tensorboard(
                         filewriters['valid'], i, *valid_evaluation_tuple)
 
-                    test_evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.test, max_points=10000)
-                    log_util.log_tensorboard(
-                        filewriters['test'], i, *test_evaluation_tuple)
+                    test_evaluation_tuple = ((-1,), -1, "--") 
+                    # test_evaluation_tuple = self.evaluate_bleu(
+                    #     session, data_tuple.test, max_points=10000)
+                    # log_util.log_tensorboard(
+                    #     filewriters['test'], i, *test_evaluation_tuple)
 
                     log_util.log_std_out(
                         i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
@@ -192,19 +193,22 @@ def _build_argparser():
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
                         type=int, default=300,
                         help='size of LSTM size')
+    parser.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
+                       type=str, default='var_only',
+                       help='the type of tokenizer to build the char_sequence: var_only, var_funcname')
     return parser
 
 
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs,
                vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, **kwargs):
+               use_full_dataset, use_split_dataset, tokenizer, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset)
+        use_full_dataset, use_split_dataset, tokenizer)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
 
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,

@@ -34,13 +34,17 @@ def main(_):
     qstat_logs = "/home/ehambro/EWEEZ/project/qstat_logs/{}".format(now)
 
     hyperparameters_space = dict(
-        # emb_dim=[100, 200, 300],
-        # l2=[0.0, 0.001, 0.0001],
+        char_seq=[600],
+        vocab_size=[70000],
+        char_embed=[100],
+        desc_embed=[100],
         batch_size=[128],
-        lstm_size=[64, 128, 256],
-        dropout=[0.0, 0.1, 0.3, 0.5],
+        lstm_size=[128],
+        dropout=[0.4],
+        tokenizer=['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs'],
+        name=['diff_token'],
+        save_every=[-1],
         logdir=[log_path]
-
     )
 
     configurations = cartesian_product(hyperparameters_space)
@@ -82,7 +86,7 @@ def main(_):
 export LANG="en_US.utf8"
 export LANGUAGE="en_US:en"
 
-cd /home/scimpian/msc-project/
+cd /home/ehambro/EWEEZ/project/
 export PYTHONPATH=.
 
 """.format(nb_jobs)

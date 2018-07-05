@@ -27,7 +27,7 @@ def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Augment the variable name with the function name, and run through baseline model')
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
-                        type=int, default=300,
+                        type=int, default=128,
                         help='size of LSTM size')
     return parser
 
