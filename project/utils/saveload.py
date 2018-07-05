@@ -9,7 +9,7 @@ SAVER = None
 class NoSaverException(Exception):
     pass
 
-def save(session, logdir, name, iterations, max_saves=5):
+def save(session, logpath, name, iterations, max_saves=5):
     global SAVER
 
     if SAVER is None:
@@ -17,16 +17,16 @@ def save(session, logdir, name, iterations, max_saves=5):
     elif SAVER == -1:
         return "Saving skipped" 
     
-    name = "logs/{}/{}.ckpt".format(logdir, name)
+    name = "{}/{}.ckpt".format(logpath, name)
     file = SAVER.save(session, name, global_step=iterations)
-    LOGGING.info("Saved to {}".format(file))
+    LOGGER.info("Saved to {}".format(file))
     return file
 
-def load(session, logdir, name):
+def load(session, logpath, name):
     global SAVER
     if SAVER is None:
         SAVER = tf.train.Saver(max_to_keep=5)
-    return SAVER.restore(session, "logs/{}/{}".format(logdir, name))
+    return SAVER.restore(session, "{}/{}".format(logpath, name))
 
 def setup_saver(max_saves):
     global SAVER

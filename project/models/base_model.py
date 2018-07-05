@@ -257,8 +257,6 @@ class BasicRNNModel(abc.ABC):
                 arg_desc_batch = arg_desc[idx_start: idx_end]
                 yield arg_name_batch, arg_desc_batch
 
-
-    
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
         all_references = []
