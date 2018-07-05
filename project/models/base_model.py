@@ -2,13 +2,12 @@
 import abc
 from collections import namedtuple
 
-from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
+# from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction 
 import numpy as np
 import tensorflow as tf
 
 from project.external.nmt import bleu
-from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
-                               START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+from project.utils.tokenize import START_OF_TEXT_TOKEN
 
 
 EXPERIMENT_SUMMARY_STRING = '''
@@ -77,13 +76,6 @@ class BasicRNNModel(abc.ABC):
         '''Describe the models parameters in a string, for logging'''
         string = "Args: arg1: {}, arg2: {} ".format(1, 2)        
         return string
-
-    @abc.abstractmethod
-    def _log_in_tensorboard(self):
-        '''allo'''
-        for name, var in scalar_vars:
-            tf.summary.scalar(name, var)
-        return tf.summary.merge_all()
 
     def __str__(self):
         return self.__class__.summary_string.format(

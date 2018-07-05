@@ -1,7 +1,6 @@
 from datetime import datetime
 import logging
 import os
-import sys
 
 import tensorflow as tf
 
