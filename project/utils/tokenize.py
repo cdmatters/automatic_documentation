@@ -11,6 +11,9 @@ PAD_TOKEN = '<PAD>'
 UNKNOWN_TOKEN = '<UNK>'
 START_OF_TEXT_TOKEN = '<START>'
 END_OF_TEXT_TOKEN = '<END>'
+SEPARATOR_1 = '<SEP-1>'
+SEPARATOR_2 = '<SEP-2>'
+
 
 EmbedTuple = namedtuple(
     "EmbedTuple", ['word_weights', 'word2idx', 'char_weights', 'char2idx'])
@@ -23,6 +26,8 @@ def get_weights_char2idx(char_embed):
 
     # ':' is a stop token
     char2idx = {a: i+1 for i, a in enumerate(arg_alphabet)}
+    char2idx[SEPARATOR_1] = len(char2idx.keys())
+    char2idx[SEPARATOR_2] = len(char2idx.keys())
     char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
 
     char_weights = np.random.uniform(
@@ -73,25 +78,56 @@ def get_weights_word2idx(desc_embed, vocab_size=100000):
     return (weights, word2idx)
 
 
-def tokenize_descriptions(data, word2idx, char2idx):
+def fill_descriptions_tok(d, word2idx):
     unk_token = word2idx[UNKNOWN_TOKEN]
+    desc = d['arg_desc'].replace('\\n', " ").lower()
+    desc_tok = nltk.word_tokenize(desc)
+
+    d['arg_desc_tokens'] = [START_OF_TEXT_TOKEN]
+    d['arg_desc_idx'] = [word2idx[START_OF_TEXT_TOKEN]]
+
+    d['arg_desc_tokens'].extend(
+        [w if w in word2idx else UNKNOWN_TOKEN for w in desc_tok])
+    d['arg_desc_idx'].extend([word2idx.get(t, unk_token)
+                              for t in desc_tok])
+
+    d['arg_desc_tokens'].append(END_OF_TEXT_TOKEN)
+    d['arg_desc_idx'].append(word2idx[END_OF_TEXT_TOKEN])
+
+
+def fill_name_tok(d, char2idx):
+    d['arg_name_tokens'] = [c for c in d['arg_name']]
+    d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
+
+    d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
+    d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
+
+
+def fill_name_funcname_tok(d, char2idx):
+    d['arg_name_tokens'] = [c for c in d['arg_name']]
+    d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
+
+    d['arg_name_tokens'].append(SEPARATOR_1)
+    d['arg_name_idx'].append(char2idx[SEPARATOR_1])
+
+    d['arg_name_tokens'].extend([c for c in d['name']])
+    d['arg_name_idx'].extend([char2idx[c] for c in d['name']])
+
+    d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
+    d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
+
+
+def tokenize_vars_funcname_and_descriptions(data, word2idx, char2idx):
     for i, d in enumerate(data):
-        desc = d['arg_desc'].replace('\\n', " ").lower()
-        desc_tok = nltk.word_tokenize(desc)
+        fill_descriptions_tok(d, word2idx)
+        fill_name_funcname_tok(d, char2idx)
+    return data
 
-        d['arg_desc_tokens'] = [START_OF_TEXT_TOKEN]
-        d['arg_desc_idx'] = [word2idx[START_OF_TEXT_TOKEN]]
-        d['arg_desc_tokens'].extend(
-            [w if w in word2idx else UNKNOWN_TOKEN for w in desc_tok])
-        d['arg_desc_idx'].extend([word2idx.get(t, unk_token)
-                                  for t in desc_tok])
-        d['arg_desc_tokens'].append(END_OF_TEXT_TOKEN)
-        d['arg_desc_idx'].append(word2idx[END_OF_TEXT_TOKEN])
-        d['arg_name_tokens'] = [c for c in d['arg_name']]
-        d['arg_name_idx'] = [char2idx[c] for c in d['arg_name']]
-        d['arg_name_tokens'].append(END_OF_TEXT_TOKEN)
-        d['arg_name_idx'].append(char2idx[END_OF_TEXT_TOKEN])
 
+def tokenize_vars_and_descriptions(data, word2idx, char2idx):
+    for i, d in enumerate(data):
+        fill_descriptions_tok(d, word2idx)
+        fill_name_tok(d, char2idx)
     return data
 
 
@@ -121,7 +157,7 @@ def get_data_tuple(use_full_dataset, use_split_dataset):
 
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset):
+                                   use_full_dataset, use_split_dataset, tokenizer='var_only'):
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
 
     print("Loading GloVe weights and word to index lookup table")
@@ -129,10 +165,15 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
 
+    if tokenizer == 'var_only':
+        tokenize = tokenize_vars_and_descriptions
+    elif tokenizer == 'var_funcname':
+        tokenize = tokenize_vars_funcname_and_descriptions
+
     print("Tokenizing the word desctiptions and characters")
-    train_data = tokenize_descriptions(data_tuple.train, word2idx, char2idx)
-    valid_data = tokenize_descriptions(data_tuple.valid, word2idx, char2idx)
-    test_data = tokenize_descriptions(data_tuple.test, word2idx, char2idx)
+    train_data = tokenize(data_tuple.train, word2idx, char2idx)
+    valid_data = tokenize(data_tuple.valid, word2idx, char2idx)
+    test_data = tokenize(data_tuple.test, word2idx, char2idx)
 
     print("Extracting tensors train and test")
     train_data = extract_char_and_desc_idx_tensors(
@@ -150,5 +191,5 @@ if __name__ == '__main__':
 
     weights, word2idx = get_weights_word2idx()
     char_weights, char2idx = get_weights_char2idx(200)
-    data = tokenize_descriptions(DATA.test, word2idx, char2idx)
+    data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
     print(data[0])
