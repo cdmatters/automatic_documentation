@@ -7,33 +7,38 @@ import sys
 from datetime import datetime
 
 
-
 COMMAND = '''PYTHONPATH=. anaconda-python3-gpu -m project.models.{model} -FS {args} '''
+
 
 def cartesian_product(dicts):
     return list(dict(zip(dicts, x)) for x in itertools.product(*dicts.values()))
 
+
 def to_name(configuration):
-    kvs = sorted([(k, v) for k, v in configuration.items()], key=lambda e: e[0])
+    kvs = sorted([(k, v)
+                  for k, v in configuration.items()], key=lambda e: e[0])
     return 'auto_'+'-'.join([('{}_{}'.format(k[:1], v)) for (k, v) in kvs if k not in ["logdir"]])
 
+
 def to_cmd(model, **kwargs):
-    arg_list = " ".join(["--{}={}".format(k.replace('_','-'),v) for k,v in kwargs.items()])
+    arg_list = " ".join(["--{}={}".format(k.replace('_', '-'), v)
+                         for k, v in kwargs.items()])
     return COMMAND.format(model=model, args=arg_list)
+
 
 def main(_):
     now = datetime.strftime(datetime.now(), '%d%m_%H%M%S')
-    
+
     model = 'char_baseline'
     log_path = '/home/ehambro/EWEEZ/project/logs'
     qstat_logs = "/home/ehambro/EWEEZ/project/qstat_logs/{}".format(now)
-    
+
     hyperparameters_space = dict(
         # emb_dim=[100, 200, 300],
         # l2=[0.0, 0.001, 0.0001],
         batch_size=[128],
         lstm_size=[64, 128, 256],
-        dropout=[0.0, 0.1, 0.3, 0.5],        
+        dropout=[0.0, 0.1, 0.3, 0.5],
         logdir=[log_path]
 
     )
@@ -54,7 +59,8 @@ def main(_):
     for cfg in configurations:
         name = to_name(cfg)
 
-        command_line = '{} --name={} >> {}/{}.log 2>&1'.format(to_cmd(model, **cfg), name, qstat_logs, name)
+        command_line = '{} --name={} >> {}/{}.log 2>&1'.format(
+            to_cmd(model, **cfg), name, qstat_logs, name)
         command_lines |= {command_line}
 
     # Sort command lines and remove duplicates
@@ -89,4 +95,3 @@ export PYTHONPATH=.
 
 if __name__ == '__main__':
     main(sys.argv[1:])
- 

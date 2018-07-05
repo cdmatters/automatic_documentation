@@ -10,13 +10,16 @@ from yaml.constructor import Constructor
 from project.data import preprocessed, data
 
 
-## Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
+# Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
 def add_bool(self, node):
-        return self.construct_scalar(node)
+    return self.construct_scalar(node)
+
+
 Constructor.add_constructor(u'tag:yaml.org,2002:bool', add_bool)
 
 RAWDATADIR = os.path.dirname(os.path.abspath(data.__file__))
 PREPROCESSDATADIR = os.path.dirname(os.path.abspath(preprocessed.__file__))
+
 
 def _ad_hoc_clean(filename, line):
     '''Cleans data for specific versions of data. These are very adhoc rules,
@@ -38,6 +41,7 @@ def _ad_hoc_clean(filename, line):
 
     return line
 
+
 def assimilate_data():
     '''Clean and assimilate data into big yaml files (not necessarily human readable)'''
     types = ['full', 'short']
@@ -49,20 +53,22 @@ def assimilate_data():
             if yaml_file == 'error.yaml':
                 continue
             with open(RAWDATADIR + "/{}/{}".format(t, yaml_file), "r", encoding='utf-8') as f:
-                string = '\n'.join([_ad_hoc_clean(yaml_file, l) for l in f.readlines()])
+                string = '\n'.join([_ad_hoc_clean(yaml_file, l)
+                                    for l in f.readlines()])
                 data = yaml.load(string.replace(
                     "            desc: `", "            desc: \\`").replace(
                     "            type: `", "            type: \\`"), Loader=CLoader)
 
-                print("{}: {} To Update: {} ".format(i, yaml_file, len(data.keys())))
+                print("{}: {} To Update: {} ".format(
+                    i, yaml_file, len(data.keys())))
                 tot = len(all_data.keys())
                 all_data.update(data)
-                print("{}: {} Updated: {} ".format(i, yaml_file, len(all_data.keys()) - tot))
-
+                print("{}: {} Updated: {} ".format(
+                    i, yaml_file, len(all_data.keys()) - tot))
 
                 args = 0
                 for d in data.values():
-                    args += len([k for k,v in d["arg_info"].items() if v['desc']])
+                    args += len([k for k, v in d["arg_info"].items() if v['desc']])
                     tot_args += len(d["args"])
 
                 tot_f += len(data)
@@ -72,7 +78,7 @@ def assimilate_data():
                 }
 
         with open(PREPROCESSDATADIR+"/index.txt", "w") as f:
-            all_files["TOTAL__"] = {"funcs":tot_f, "args":tot_args}
+            all_files["TOTAL__"] = {"funcs": tot_f, "args": tot_args}
             f.write(pyaml.dump(all_files))
         with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "w") as f:
             f.write(yaml.dump(all_data, Dumper=CDumper))
@@ -84,10 +90,10 @@ def assimilate_data():
             print("loaded {}: {} records".format(t, len(data)))
     return all_files
 
+
 def map_yaml_to_arg_list(yaml_object):
     import copy
     args = []
-    id_no = 0
     count = 0
     desc_count = 0
     for k, v in yaml_object.items():
@@ -106,6 +112,7 @@ def map_yaml_to_arg_list(yaml_object):
     print("Args: ", count, " Args with Desc: ", desc_count)
     return args
 
+
 def prep_main_set(test_percentage):
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
         data = yaml.load(f, Loader=CLoader)
@@ -119,14 +126,15 @@ def prep_main_set(test_percentage):
     train_data = main_data[int(n * test_percentage):]
 
     preprocessed.save_data(train_data, test_data, 'unsplit')
-    
+
+
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
         data = yaml.load(f, Loader=CLoader)
 
     overfit_set = {}
-    for k,v in data.items():
+    for k, v in data.items():
         if v['filename'].startswith("/numpy/"):
             overfit_set[k] = v
 
@@ -139,7 +147,7 @@ def prep_overfit_set(test_percentage):
     train = overfit_data[int(n * test_percentage):]
 
     preprocessed.save_data(train, test, 'overfit')
-    
+
 
 def prep_repo_split_set(test_percentage):
     '''Prepare a data set with training and test data from different repositories'''
@@ -148,7 +156,7 @@ def prep_repo_split_set(test_percentage):
 
     total = index_data.pop("TOTAL__")
     test_set_size = total["args"] * test_percentage
-    
+
     count = 0
     test_repos = []
 
@@ -156,7 +164,7 @@ def prep_repo_split_set(test_percentage):
         name = k.split('.')[0]
         if name in ['scipy', 'numpy']:
             continue
-        
+
         test_repos.append(name)
         count += v["args"]
 
@@ -168,28 +176,29 @@ def prep_repo_split_set(test_percentage):
 
     test_set = {}
     train_set = {}
-    for k,v in data.items():
+    for k, v in data.items():
         if v['pkg'] in test_repos:
             test_set[k] = v
         else:
             train_set[k] = v
-    
+
     train_data = map_yaml_to_arg_list(train_set)
     test_data = map_yaml_to_arg_list(test_set)
 
     random.shuffle(train_data)
     random.shuffle(test_data)
-    
-    
+
     print("Test Args: {}".format(len(test_data)))
     print("Train Args: {}".format(len(train_data)))
     print("Test Fraction: {:4f}".format(
         len(test_data)/(len(test_data) + len(train_data))))
 
     preprocessed.save_data(train_data, test_data, 'split')
-    
+
+
 def _build_argparser():
-    parser = argparse.ArgumentParser(description='Preprocess your raw Bonaparte data into formats that can be used')
+    parser = argparse.ArgumentParser(
+        description='Preprocess your raw Bonaparte data into formats that can be used')
     parser.add_argument('--assimilate', '-a', dest='assimilate', action='store_true',
                         default=False, help='collect all individual yaml files and assimilate into master yaml (must be fone before prepping data sets)')
     parser.add_argument('--prep_overfit', '-o', dest='overfit_set', action='store_true',
@@ -199,9 +208,10 @@ def _build_argparser():
     parser.add_argument('--prep_separate_repos', '-s', dest='sep_repos', action='store_true',
                         default=False, help='prepare data sets with train and test from different repositories')
     parser.add_argument('--run-all', '-r', dest='run_all', action='store_true',
-                        default=False, help='assimilate and prep both main and overfit datasets')    
+                        default=False, help='assimilate and prep both main and overfit datasets')
 
     return parser
+
 
 if __name__ == "__main__":
     parser = _build_argparser()
