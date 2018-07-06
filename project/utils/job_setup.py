@@ -17,7 +17,8 @@ def cartesian_product(dicts):
 def to_name(configuration):
     kvs = sorted([(k, v)
                   for k, v in configuration.items()], key=lambda e: e[0])
-    return 'auto_'+'-'.join([('{}_{}'.format(k[:1], v)) for (k, v) in kvs if k not in ["logdir"]])
+    name = configuration.get("name", "auto_")
+    return name + '-'.join([('{}_{}'.format(k[:1], v)) for (k, v) in kvs if k not in ["logdir"]])
 
 
 def to_cmd(model, **kwargs):
@@ -35,14 +36,15 @@ def main(_):
 
     hyperparameters_space = dict(
         char_seq=[600],
-        vocab_size=[70000],
+        vocab_size=[50000],
         char_embed=[100],
         desc_embed=[100],
         batch_size=[128],
         lstm_size=[128],
+        bidirectional=[True],
         dropout=[0.4],
         tokenizer=['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs'],
-        name=['diff_token'],
+        name=['bidirect'],
         save_every=[-1],
         logdir=[log_path]
     )

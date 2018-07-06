@@ -111,6 +111,41 @@ class BasicRNNModel(abc.ABC):
             return encode_embedded, decode_embedded, char_embedding, word_embedding
 
     @staticmethod
+    def _build_bi_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
+        with tf.name_scope("encoder"):
+            batch_size = tf.shape(input_data_seq_length)
+            encoder_rnn_cell_fw = tf.contrib.rnn.BasicLSTMCell(
+                rnn_size, name="RNNencoder")
+            initial_state_fw = encoder_rnn_cell_fw.zero_state(
+                batch_size, dtype=tf.float32)
+
+            encoder_rnn_cell_fw = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell_fw,
+                                                             input_keep_prob=dropout_keep_prob,
+                                                             output_keep_prob=dropout_keep_prob,
+                                                             state_keep_prob=dropout_keep_prob)
+
+            encoder_rnn_cell_bk = tf.contrib.rnn.BasicLSTMCell(
+                rnn_size, name="RNNencoder")
+            initial_state_bk = encoder_rnn_cell_bk.zero_state(
+                batch_size, dtype=tf.float32)
+            
+            encoder_rnn_cell_bk = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell_bk,
+                                                             input_keep_prob=dropout_keep_prob,
+                                                             output_keep_prob=dropout_keep_prob,
+                                                             state_keep_prob=dropout_keep_prob)
+
+            outputs, output_states = tf.nn.bidirectional_dynamic_rnn(encoder_rnn_cell_fw, encoder_rnn_cell_bk,
+                                                  encode_embedded,
+                                                  sequence_length=input_data_seq_length,
+                                                  initial_state_fw=initial_state_fw,
+                                                  initial_state_bk=initial_state_bk,
+                                                  time_major=False)
+
+
+            return tf.concat(outputs, 2), tf.concat(output_states, 2)
+
+
+    @staticmethod
     def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
         with tf.name_scope("encoder"):
             batch_size = tf.shape(input_data_seq_length)

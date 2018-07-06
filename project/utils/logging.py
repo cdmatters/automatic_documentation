@@ -6,7 +6,7 @@ import tensorflow as tf
 
 LOGGER = logging.getLogger('')
 
-SUMMARY_STR = """MINIBATCHES: {}, TRAIN_LOSS: {:5f}, VALID_LOSS: {:5f}, TEST_LOSS: {:5f},
+SUMMARY_STR = u"""MINIBATCHES: {}, TRAIN_LOSS: {:5f}, VALID_LOSS: {:5f}, TEST_LOSS: {:5f},
 TRAIN_BLEU: {}
 VALID_BLEU: {}
 TEST_BLEU: {}"""
@@ -30,9 +30,9 @@ def log_tensorboard(filewriter, i, bleu_tuple, av_loss, translations):
 
 def build_translation_log_string(prefix, bleu_tuple, loss, translations):
     log = [
-        "{}: Bleu:{}, Av Loss:".format(prefix, bleu_tuple[0] * 100, loss),
-        "\n--{}--\n".format(prefix[:3]).join(str(t) for t in translations),
-        '--------------------'
+        u"{}: Bleu:{}, Av Loss:".format(prefix, bleu_tuple[0] * 100, loss),
+        u"\n--{}--\n".format(prefix[:3]).join(str(t) for t in translations),
+        u'--------------------'
     ]
     return "\n".join(log)
 
@@ -42,7 +42,7 @@ def get_filewriters(logpath, session):
         'train_continuous':  tf.summary.FileWriter('{}/train_continuous'.format(logpath), session.graph),
         'train': tf.summary.FileWriter('{}/train'.format(logpath), session.graph),
         'valid': tf.summary.FileWriter('{}/valid'.format(logpath)),
-        'test': tf.summary.FileWriter('{}/test'.format(logpath))
+        # 'test': tf.summary.FileWriter('{}/test'.format(logpath))
     }
 
 

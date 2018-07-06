@@ -52,7 +52,6 @@ def log_args(parse_fn):
         return p
     return wrapper
 
-
 def train_args(parse_fn):
     @wraps(parse_fn)
     def wrapper(*args, **kwds):

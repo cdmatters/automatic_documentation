@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 from datetime import datetime
 import logging
@@ -22,7 +23,8 @@ LOGGER = logging.getLogger('')
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, dropout=0.3, name="BasicModel"):
+    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
+                dropout=0.3, bidirectional=False, name="BasicModel"):
         super().__init__(embed_tuple, name)
         # To Do; all these args from config, to make saving model easier.
 
@@ -30,6 +32,7 @@ class CharSeqBaseline(BasicRNNModel):
         self.learning_rate = learning_rate
         self.rnn_size = rnn_size
         self.dropout = dropout
+        self.bidirectional = bidirectional
 
         # Graph Variables (built later)
         self.input_data_sequence = None
@@ -78,12 +81,20 @@ class CharSeqBaseline(BasicRNNModel):
                 input_label_sequence, self.word_weights)
 
             # 2. Build out Encoder
-            encoder_outputs, state = self._build_rnn_encoder(
-                input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
+            if self.bidirectional:
+                encoder_outputs, state = self._build_bi_rnn_encoder(
+                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
+            else:
+                encoder_outputs, state = self._build_rnn_encoder(
+                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
 
             # 3. Build out Cell ith attention
-            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                self.rnn_size, name="RNNencoder")
+            if self.bidirectional:
+                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
+                    self.rnn_size * 2, name="RNNencoder")
+            else:
+                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
+                    self.rnn_size, name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
@@ -196,13 +207,17 @@ def _build_argparser():
     parser.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
                        type=str, default='var_only',
                        help='the type of tokenizer to build the char_sequence: var_only, var_funcname')
+    parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
+                       type=bool, default=True,
+                       help='use bidirectional lstm')
+
     return parser
 
 
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs,
                vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, tokenizer, **kwargs):
+               use_full_dataset, use_split_dataset, tokenizer, bidirectional, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
