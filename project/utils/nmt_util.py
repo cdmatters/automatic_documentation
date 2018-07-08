@@ -10,8 +10,10 @@ def write_data_to_file(data, name):
     desc_seq = []
     for d in data:
         char_seq.append(d['arg_name_tokens'])
-        desc_seq.append(d['arg_desc_tokens'])
-    
+        desc_seq.append(d['arg_desc'].replace('\n',' ').split())
+
+
+
     with open(NMT_PATH.format(name+'.ch'), 'w') as f:
         for c in char_seq:
             f.write(" ".join(c))
@@ -37,13 +39,13 @@ def gen_desc_vocab_file(vocab_size, dim):
         for i, line in enumerate(f):
             values = line.split()
             vocab.append(values[0])
-            
+
             if i > vocab_size:
                 break
 
     vocab.extend(get_special_tokens())
 
-    with open(NMT_PATH.format('vocab.de'), 'w') as f:
+    with open(NMT_PATH.format('vocab.de'), 'w', encoding='utf-8') as f:
         for v in vocab:
             f.write("{}\n".format(v))
 
@@ -68,7 +70,8 @@ if __name__ == "__main__":
     train_data = tokenizer(data_tuple.train, word2idx, char2idx)
     valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
     test_data = tokenizer(data_tuple.test, word2idx, char2idx)
-    
+
     write_data_to_file(train_data, 'train')
     write_data_to_file(valid_data, 'valid')
-    
+    write_data_to_file(valid_data, 'test')
+
