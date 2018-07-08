@@ -110,9 +110,9 @@ class CharSeqBaseline(BasicRNNModel):
                 output_keep_prob=dropout_keep_prob,
                 state_keep_prob=dropout_keep_prob)
 
-            decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
-                decoder_rnn_cell, attention_mechanism,
-                attention_layer_size=self.rnn_size)
+            # decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+            #     decoder_rnn_cell, attention_mechanism,
+            #     attention_layer_size=self.rnn_size)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
@@ -120,10 +120,14 @@ class CharSeqBaseline(BasicRNNModel):
                                                                    input_label_seq_length,
                                                                    decode_embedded)
 
-            inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
+            inf_outputs, _, _ = self._build_rnn_beam_inference_decoder(decoder_rnn_cell,
                                                                          state, projection_layer, decoder_weights,
                                                                          self.word2idx[START_OF_TEXT_TOKEN],
-                                                                         self.word2idx[END_OF_TEXT_TOKEN])
+                                                                         self.word2idx[END_OF_TEXT_TOKEN])            
+            # inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
+            #                                                              state, projection_layer, decoder_weights,
+            #                                                              self.word2idx[START_OF_TEXT_TOKEN],
+            #                                                              self.word2idx[END_OF_TEXT_TOKEN])
 
             # 5. Define Train Loss
             train_logits = train_outputs.rnn_output
@@ -132,10 +136,11 @@ class CharSeqBaseline(BasicRNNModel):
             train_translate = train_outputs.sample_id
 
             # 6. Define Translation
-            inf_logits = inf_outputs.rnn_output
-            inf_translate = inf_outputs.sample_id
-            inf_loss = self._get_loss(
-                inf_logits, input_label_sequence, input_label_seq_length)
+            # inf_logits = inf_outputs.rnn_output
+            # inf_loss = self._get_loss(
+                # inf_logits, input_label_sequence, input_label_seq_length)
+            # inf_translate = inf_outputs.sample_id
+            inf_translate = inf_outputs.predicted_ids
 
             # 7. Do Updates
             update = self._do_updates(train_loss, self.learning_rate)
@@ -148,7 +153,7 @@ class CharSeqBaseline(BasicRNNModel):
             self.train_loss = train_loss
             self.train_id = train_translate
 
-            self.inference_loss = inf_loss
+            # self.inference_loss = inf_loss
             self.inference_id = inf_translate
 
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
@@ -229,7 +234,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 
-    LOGGER.warning("Printing to {}".format(log_path))
+    LOGGER.warning("Follow logs with \n\n ./log_summary.sh -f {}/main.log \n".format(log_path))
     LOGGER.multiline_info(summary)
 
     init = tf.group(tf.global_variables_initializer(),

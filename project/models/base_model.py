@@ -1,6 +1,7 @@
 
 import abc
 from collections import namedtuple
+import logging
 
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import numpy as np
@@ -23,16 +24,20 @@ DATA: vocab_size: {vocab}, char_seq: {char}, desc_seq: {desc},
 '''
 
 SingleTranslation = namedtuple(
-    "Translation", ['name', 'description', 'translation'])
-SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
-    s.name, " ".join(s.description), " ".join(s.translation))
+    "Translation", ['name', 'description', 'translation','translation2', 'translation3' ])
+SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR1: {}\nINFR2: {}\nINFR3: {}".format(
+    s.name, " ".join(s.description), " ".join(s.translation)," ".join(s.translation2)," ".join(s.translation3) )
 
-exp_sum = ['nn', 'vocab', 'char_seq', 'desc_seq', 'char_embed', 'desc_embed', 'full_dataset', 'split_dataset']
+exp_sum = ['nn', 'vocab', 'char_seq', 'desc_seq', 'char_embed',
+           'desc_embed', 'full_dataset', 'split_dataset']
 ExperimentSummary = namedtuple("ExperimentSummary", exp_sum)
 ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
     vocab=s.vocab, char=s.char_seq, desc=s.desc_seq,
     full=s.full_dataset, nn=s.nn, split=s.split_dataset,
     c_embed=s.char_embed, d_embed=s.desc_embed)
+
+
+LOGGER = logging.getLogger('')
 
 
 class BasicRNNModel(abc.ABC):
@@ -120,30 +125,28 @@ class BasicRNNModel(abc.ABC):
                 batch_size, dtype=tf.float32)
 
             encoder_rnn_cell_fw = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell_fw,
-                                                             input_keep_prob=dropout_keep_prob,
-                                                             output_keep_prob=dropout_keep_prob,
-                                                             state_keep_prob=dropout_keep_prob)
+                                                                input_keep_prob=dropout_keep_prob,
+                                                                output_keep_prob=dropout_keep_prob,
+                                                                state_keep_prob=dropout_keep_prob)
 
             encoder_rnn_cell_bk = tf.contrib.rnn.BasicLSTMCell(
                 rnn_size, name="RNNencoder")
             initial_state_bk = encoder_rnn_cell_bk.zero_state(
                 batch_size, dtype=tf.float32)
-            
+
             encoder_rnn_cell_bk = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell_bk,
-                                                             input_keep_prob=dropout_keep_prob,
-                                                             output_keep_prob=dropout_keep_prob,
-                                                             state_keep_prob=dropout_keep_prob)
+                                                                input_keep_prob=dropout_keep_prob,
+                                                                output_keep_prob=dropout_keep_prob,
+                                                                state_keep_prob=dropout_keep_prob)
 
             outputs, output_states = tf.nn.bidirectional_dynamic_rnn(encoder_rnn_cell_fw, encoder_rnn_cell_bk,
-                                                  encode_embedded,
-                                                  sequence_length=input_data_seq_length,
-                                                  initial_state_fw=initial_state_fw,
-                                                  initial_state_bk=initial_state_bk,
-                                                  time_major=False)
-
+                                                                     encode_embedded,
+                                                                     sequence_length=input_data_seq_length,
+                                                                     initial_state_fw=initial_state_fw,
+                                                                     initial_state_bk=initial_state_bk,
+                                                                     time_major=False)
 
             return tf.concat(outputs, 2), tf.concat(output_states, 2)
-
 
     @staticmethod
     def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
@@ -167,16 +170,16 @@ class BasicRNNModel(abc.ABC):
     def _build_rnn_training_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
                                     input_label_seq_length, decode_embedded):
         with tf.name_scope("training"):
-            batch_size = tf.shape(state[0])[0]
+            # batch_size = tf.shape(state[0])[0]
 
             helper = tf.contrib.seq2seq.TrainingHelper(
                 decode_embedded, input_label_seq_length, time_major=False)
 
-            decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
-                cell_state=state)
+            # decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+            #     cell_state=state)
 
             decoder = tf.contrib.seq2seq.BasicDecoder(
-                decoder_rnn_cell, helper, decoder_initial_state,
+                decoder_rnn_cell, helper, state, #decoder_initial_state,
                 output_layer=projection_layer)
 
             return tf.contrib.seq2seq.dynamic_decode(decoder, impute_finished=True)
@@ -200,6 +203,33 @@ class BasicRNNModel(abc.ABC):
             maximum_iterations = 300
             return tf.contrib.seq2seq.dynamic_decode(
                 decoder, impute_finished=True, maximum_iterations=maximum_iterations)
+
+    @staticmethod
+    def _build_rnn_beam_inference_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
+                                          start_tok, end_tok, beam_width=10):
+        with tf.name_scope("beam_inference"):
+            batch_size = tf.shape(state[0])[0]  #* beam_width
+
+            tiled_decoder_initial_state = tf.contrib.seq2seq.tile_batch(
+                state, multiplier=beam_width)
+
+            # decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+            #     cell_state=tiled_decoder_initial_state)
+  
+
+            decoder = tf.contrib.seq2seq.BeamSearchDecoder(
+                cell=decoder_rnn_cell,
+                embedding=decoder_weights,
+                start_tokens=tf.fill([batch_size], start_tok),
+                end_token=end_tok,
+                initial_state=tiled_decoder_initial_state, #decoder_initial_state,
+                beam_width=beam_width,
+                output_layer=projection_layer,
+                length_penalty_weight=0.5)
+
+            maximum_iterations = 300
+            return tf.contrib.seq2seq.dynamic_decode(
+                decoder, impute_finished=False, maximum_iterations=maximum_iterations)
 
     @staticmethod
     def _get_loss(logits, input_label_sequence, input_label_seq_length):
@@ -294,6 +324,8 @@ class BasicRNNModel(abc.ABC):
         all_references = []
         all_translations = []
         all_training_loss = []
+        all_backups1 = []
+        all_backups2 = []
 
         ops = [self.merged_metrics, self.train_loss, self.inference_id]
         for arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
@@ -303,33 +335,41 @@ class BasicRNNModel(abc.ABC):
 
             # Translating quirks:
             #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
-            #    references: RETURN: [['<START>', 'this', 'reference', '<END>']] 
+            #    references: RETURN: [['<START>', 'this', 'reference', '<END>']]
             #                NOT: ['<START>', 'this', 'reference','<END>'],
             #                     because compute_bleu takes multiple references
-            #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
+            #    translations: RETURN: ['<START>', 'this', 'translation', '<END>']
             #                  NOT: ['this', 'translation', '<END>']
             names = [self.translate(i, lookup=self.idx2char).replace(
                 " ", "") for i in arg_name]
             references = [[self.translate(i, do_join=False)] for i in arg_desc]
             translations = [self.translate(
-                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids]
+                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids[:,:,0]]
+
+            backups1 = [self.translate(
+                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids[:,:,1]]
+            
+            backups2 = [self.translate(
+                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids[:,:,2]]
 
             all_training_loss.append(train_loss)
             all_names.extend(names)
             all_references.extend(references)
             all_translations.extend(translations)
+            all_backups1.extend(backups1)
+            all_backups2.extend(backups2)
 
         # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
         # To Do: Replace with NLTK:
         #         smoother = SmoothingFunction()
-        #         bleu_score = corpus_bleu(all_references, all_translations, 
+        #         bleu_score = corpus_bleu(all_references, all_translations,
         #                                  smoothing_function=smoother.method2)
         bleu_tuple = bleu.compute_bleu(
             all_references, all_translations, max_order=4, smooth=False)
         av_loss = np.mean(all_training_loss)
 
-        translations = [SingleTranslation(n, d[0], t) for n, d, t in zip(
-            all_names, all_references, all_translations)]
+        translations = [SingleTranslation(n, d[0], t, b1, b2) for n, d, t, b1, b2 in zip(
+            all_names, all_references, all_translations, all_backups1, all_backups2 )]
 
         return bleu_tuple, av_loss, translations[:max_translations]
 
