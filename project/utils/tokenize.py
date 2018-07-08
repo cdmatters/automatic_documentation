@@ -15,15 +15,20 @@ SEPARATOR_1 = '<SEP-1>'
 SEPARATOR_2 = '<SEP-2>'
 SEPARATOR_3 = '<SEP-3>'
 
+CHAR_VOCAB = 'abcdefghijklmnopqrstuvwyxzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_*:'
+
 
 EmbedTuple = namedtuple(
     "EmbedTuple", ['word_weights', 'word2idx', 'char_weights', 'char2idx'])
 
+def get_special_tokens():
+    return [PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN, 
+            END_OF_TEXT_TOKEN, SEPARATOR_1, SEPARATOR_2, SEPARATOR_3]
 
 def get_weights_char2idx(char_embed):
     # Weights are random, 300d
     dim = char_embed
-    arg_alphabet = 'abcdefghijklmnopqrstuvwyxzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_*:'
+    arg_alphabet = CHAR_VOCAB
 
     # ':' is a stop token
     char2idx = {a: i+1 for i, a in enumerate(arg_alphabet)}
@@ -37,19 +42,23 @@ def get_weights_char2idx(char_embed):
     return (char_weights, char2idx)
 
 
-def get_weights_word2idx(desc_embed, vocab_size=100000):
-    # Currently get the 300d embeddings from GloVe
+def get_embed_filenames():
     DIR = os.path.dirname(os.path.abspath(__file__))
 
-    word2idx = {PAD_TOKEN: 0}
-    weights = []
-
-    embed_files = {
+    return {
         50: "{}/glove/glove.6B.50d.txt".format(DIR),
         100: "{}/glove/glove.6B.100d.txt".format(DIR),
         200: "{}/glove/glove.6B.200d.txt".format(DIR),
         300: "{}/glove/glove.6B.300d.txt".format(DIR),
     }
+
+
+def get_weights_word2idx(desc_embed, vocab_size=100000):
+    # Currently get the 300d embeddings from GloVe
+    word2idx = {PAD_TOKEN: 0}
+    weights = []
+
+    embed_files = get_embed_filenames()
 
     with open(embed_files[desc_embed], "r", encoding='utf-8') as f:
         for i, line in tqdm(enumerate(f)):
@@ -219,6 +228,16 @@ def get_data_tuple(use_full_dataset, use_split_dataset):
         from project.data.preprocessed.overfit import overfit_data as data
     return data
 
+def choose_tokenizer(tokenizer):
+    if tokenizer == 'var_only':
+        tokenize = tokenize_vars_and_descriptions
+    elif tokenizer == 'var_funcname':
+        tokenize = tokenize_vars_funcname_and_descriptions
+    elif tokenizer == 'var_otherargs':
+        tokenize = tokenize_vars_other_args_and_descriptions
+    elif tokenizer == 'var_funcname_otherargs':
+        tokenize = tokenize_vars_funcname_other_args_and_descriptions
+    return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                    use_full_dataset, use_split_dataset, tokenizer='var_only'):
@@ -229,14 +248,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
 
-    if tokenizer == 'var_only':
-        tokenize = tokenize_vars_and_descriptions
-    elif tokenizer == 'var_funcname':
-        tokenize = tokenize_vars_funcname_and_descriptions
-    elif tokenizer == 'var_otherargs':
-        tokenize = tokenize_vars_other_args_and_descriptions
-    elif tokenizer == 'var_funcname_otherargs':
-        tokenize = tokenize_vars_funcname_other_args_and_descriptions
+    tokenize = choose_tokenizer(tokenizer)
 
     print("Tokenizing the word desctiptions and characters")
     train_data = tokenize(data_tuple.train, word2idx, char2idx)
