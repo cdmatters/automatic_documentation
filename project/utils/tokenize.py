@@ -1,4 +1,4 @@
-from collections import namedtuple
+from collections import namedtuple, Counter
 import os
 
 import nltk
@@ -53,38 +53,66 @@ def get_embed_filenames():
         300: "{}/glove/glove.6B.300d.txt".format(DIR),
     }
 
+def gen_train_vocab(train_data, embed_file, vocab_size):
+    all_toks = []
+    for d in train_data:
+        all_toks.extend(nltk_tok(d['arg_desc']))
+    most_common = Counter(all_toks).most_common()
+    
+    vocab = []
+    with open(embed_file, 'r', encoding='utf-8') as f:
+        file_voc = [ line.split()[0] for line in f ]
+        for tok, count in most_common:
 
-def get_weights_word2idx(desc_embed, vocab_size=100000):
+            if tok in file_voc and count > 4:
+                vocab.append(tok)
+                file_voc.remove(tok)
+
+            if len(vocab) > vocab_size:
+                break
+
+        if len(vocab) < vocab_size:
+            vocab.extend(file_voc[:vocab_size - len(vocab)])
+    return set(vocab)
+
+
+def get_weights_word2idx(desc_embed, vocab_size=100000, train_data=None):
     # Currently get the 300d embeddings from GloVe
-    word2idx = {PAD_TOKEN: 0}
-    weights = []
-
     embed_files = get_embed_filenames()
+    embed_file = embed_files[desc_embed]
 
-    with open(embed_files[desc_embed], "r", encoding='utf-8') as f:
-        for i, line in tqdm(enumerate(f)):
+    if train_data is not None:
+        desired_vocab = gen_train_vocab(train_data, embed_file, vocab_size)
+        
+
+    word2idx = {PAD_TOKEN: 0}
+    weights = [np.random.randn(desc_embed)]
+
+
+    with open(embed_file, "r", encoding='utf-8') as f:
+        i = 0 
+        for line in tqdm(f):
             values = line.split()
 
             word = values[0]
             word_weights = np.array(values[1:]).astype(np.float32)
 
-            word2idx[word] = i + 1
-            weights.append(word_weights)
+            if word in desired_vocab:
+                word2idx[word] = i + 1
+                weights.append(word_weights)
+                i += 1
 
             if i > vocab_size:
                 break
 
-    embed_dim = len(weights[0])
-    weights.insert(0, np.random.randn(embed_dim))
-
     word2idx[UNKNOWN_TOKEN] = len(weights)
-    weights.append(np.random.randn(embed_dim))
+    weights.append(np.random.randn(desc_embed))
 
     word2idx[START_OF_TEXT_TOKEN] = len(weights)
-    weights.append(np.random.randn(embed_dim))
+    weights.append(np.random.randn(desc_embed))
 
     word2idx[END_OF_TEXT_TOKEN] = len(weights)
-    weights.append(np.random.randn(embed_dim))
+    weights.append(np.random.randn(desc_embed))
 
     weights = np.asarray(weights, dtype=np.float32)
     return (weights, word2idx)
@@ -247,7 +275,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
 
     print("Loading GloVe weights and word to index lookup table")
-    word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size)
+    word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
 
