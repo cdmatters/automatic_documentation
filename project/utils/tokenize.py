@@ -22,7 +22,8 @@ EmbedTuple = namedtuple(
     "EmbedTuple", ['word_weights', 'word2idx', 'char_weights', 'char2idx'])
 
 def get_special_tokens():
-    return [PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN, 
+    return []
+    return [PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN,
             END_OF_TEXT_TOKEN, SEPARATOR_1, SEPARATOR_2, SEPARATOR_3]
 
 def get_weights_char2idx(char_embed):
@@ -88,11 +89,13 @@ def get_weights_word2idx(desc_embed, vocab_size=100000):
     weights = np.asarray(weights, dtype=np.float32)
     return (weights, word2idx)
 
+def nltk_tok(desc):
+    return nltk.word_tokenize(desc.replace('\\n', " ").lower())
+
 
 def fill_descriptions_tok(d, word2idx):
     unk_token = word2idx[UNKNOWN_TOKEN]
-    desc = d['arg_desc'].replace('\\n', " ").lower()
-    desc_tok = nltk.word_tokenize(desc)
+    desc_tok = nltk_tok(d['arg_desc'])
 
     d['arg_desc_tokens'] = [START_OF_TEXT_TOKEN]
     d['arg_desc_idx'] = [word2idx[START_OF_TEXT_TOKEN]]
@@ -272,8 +275,8 @@ if __name__ == '__main__':
     # weights, word2idx = get_weights_word2idx()
     # char_weights, char2idx = get_weights_char2idx(200)
     # data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
-    
-    data = get_embed_tuple_and_data_tuple(vocab_size=5000, char_seq=550, desc_seq=300, 
+
+    data = get_embed_tuple_and_data_tuple(vocab_size=5000, char_seq=550, desc_seq=300,
                                    char_embed=50, desc_embed=50,
                                    use_full_dataset=True, use_split_dataset=False, tokenizer='var_funcname_otherargs')
 
