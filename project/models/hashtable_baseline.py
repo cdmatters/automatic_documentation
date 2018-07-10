@@ -2,6 +2,7 @@ import argparse
 from collections import defaultdict
 import random
 
+random.seed(100)
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import nltk
 
@@ -81,16 +82,16 @@ class HashtableBaseline(object):
         print(bleu_tuple[0]*100)
 
 
-def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset):
+def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, **kwargs):
     data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset)
 
     model = HashtableBaseline()
 
     summary = ExperimentSummary(
-        model, vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset)
+        model, vocab_size, char_seq, desc_seq, None, None, use_full_dataset, use_split_dataset)
     print(summary)
 
-    model.main(data_tuple.train, data_tuple.test)
+    model.main(data_tuple.train, data_tuple.valid)
 
 
 @args.data_args
