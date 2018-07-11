@@ -62,6 +62,7 @@ class BasicRNNModel(abc.ABC):
         self.inference_loss = None
         self.inference_id = None
 
+
     @abc.abstractmethod
     def _build_train_graph(self):
         '''Build the tensorflow graph'''
@@ -310,9 +311,11 @@ class BasicRNNModel(abc.ABC):
             #                  NOT: ['this', 'translation', '<END>']
             names = [self.translate(i, lookup=self.idx2char).replace(
                 " ", "") for i in arg_name]
-            references = [[self.translate(i, do_join=False)] for i in arg_desc]
+            references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
             translations = [self.translate(
-                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN]) for i in inference_ids]
+                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN])[1:-1] for i in inference_ids]
+
+
 
             all_training_loss.append(train_loss)
             all_names.extend(names)
