@@ -34,6 +34,7 @@ ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
     full=s.full_dataset, nn=s.nn, split=s.split_dataset,
     c_embed=s.char_embed, d_embed=s.desc_embed)
 
+np.random.seed(100)
 
 class BasicRNNModel(abc.ABC):
 
@@ -288,7 +289,7 @@ class BasicRNNModel(abc.ABC):
 
                 arg_name_batch = arg_name[idx_start: idx_end]
                 arg_desc_batch = arg_desc[idx_start: idx_end]
-                yield arg_name_batch, arg_desc_batch
+                yield e, arg_name_batch, arg_desc_batch
 
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
@@ -297,7 +298,7 @@ class BasicRNNModel(abc.ABC):
         all_training_loss = []
 
         ops = [self.merged_metrics, self.train_loss, self.inference_id]
-        for arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
+        for _, arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
 
             metrics, train_loss, inference_ids = self._feed_fwd(
                 session, arg_name, arg_desc, ops)

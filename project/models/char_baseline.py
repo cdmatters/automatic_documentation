@@ -152,17 +152,18 @@ class CharSeqBaseline(BasicRNNModel):
             self.inference_id = inf_translate
 
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
+        epoch = 0
         try:
             recent_losses = [1e8] * 10  # should use a queue
-            for i, (arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
-
+            for i, (e, arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
                 _,  _, train_id, train_summary = self._feed_fwd(
                     session, arg_name, arg_desc, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
 
-                if i % test_check == 0:
+                if epoch != e:
+                    epoch = e
                     evaluation_tuple = self.evaluate_bleu(
                         session, data_tuple.train, max_points=5000)
                     log_util.log_tensorboard(
@@ -180,7 +181,7 @@ class CharSeqBaseline(BasicRNNModel):
                     #     filewriters['test'], i, *test_evaluation_tuple)
 
                     log_util.log_std_out(
-                        i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
+                        e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
 
                     if i > 0:
                         saveload.save(session, log_dir, self.name, i)

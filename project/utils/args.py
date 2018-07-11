@@ -41,7 +41,7 @@ def log_args(parse_fn):
                        type=str, default='logs',
                        help='directory for storing logs and raw experiment runs')
         p.add_argument('--test-freq', '-T', dest='test_freq', action='store',
-                       type=int, default=100,
+                       type=int, default=200,
                        help='how often to run a test and dump output')
         p.add_argument('--dump-translation', '-D', dest='test_translate', action='store',
                        type=int, default=5,

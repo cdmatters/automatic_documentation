@@ -6,7 +6,7 @@ import tensorflow as tf
 
 LOGGER = logging.getLogger('')
 
-SUMMARY_STR = u"""MINIBATCHES: {}, TRAIN_LOSS: {:5f}, VALID_LOSS: {:5f}, TEST_LOSS: {:5f},
+SUMMARY_STR = u"""EPOCH: {} MINIB: {}, TRAIN_LOSS: {:5f}, VALID_LOSS: {:5f}, TEST_LOSS: {:5f},
 TRAIN_BLEU: {}
 VALID_BLEU: {}
 TEST_BLEU: {}"""
@@ -46,17 +46,17 @@ def get_filewriters(logpath, session):
     }
 
 
-def build_summary_log_string(i, train_eval_tuple, val_eval_tuple, test_eval_tuple):
-    return SUMMARY_STR.format(i, train_eval_tuple[1], val_eval_tuple[1], test_eval_tuple[1],
+def build_summary_log_string(e, i, train_eval_tuple, val_eval_tuple, test_eval_tuple):
+    return SUMMARY_STR.format(e, i, train_eval_tuple[1], val_eval_tuple[1], test_eval_tuple[1],
                               train_eval_tuple[0][0] * 100, val_eval_tuple[0][0] * 100, test_eval_tuple[0][0] * 100)
 
 
-def log_std_out(i, eval_tuple, valid_eval_tuple, test_eval_tuple):
+def log_std_out(e, i, eval_tuple, valid_eval_tuple, test_eval_tuple):
     LOGGER.debug("---------------------------------------------")
     train_log = build_translation_log_string("TRAINING", *eval_tuple)
     valid_log = build_translation_log_string("TEST", *valid_eval_tuple)
     summary = build_summary_log_string(
-        i, eval_tuple, valid_eval_tuple, test_eval_tuple)
+        e, i, eval_tuple, valid_eval_tuple, test_eval_tuple)
 
     LOGGER.multiline_debug(train_log)
     LOGGER.multiline_debug(valid_log)
