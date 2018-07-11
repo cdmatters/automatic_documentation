@@ -36,12 +36,12 @@ def to_cmd(**kwargs):
                          for k, v in default_args.items()])
     return COMMAND.format(args=arg_list)
 
-def to_data_dirs(base, tokenizer, desc_embed, split, **kwargs):
+def to_data_dirs(base, tokenizer, desc_embed, split, vocab_size, **kwargs):
     sp = 'split' if split else 'unsplit'
     data = "nmt_data/{}_{}_{}"
     return {
         "embed_prefix": base.format("nmt_data/glove_inserted.{}.txt".format(desc_embed)),
-        "vocab_prefix": base.format("nmt_data/vocab_{}".format(sp)),
+        "vocab_prefix": base.format("nmt_data/vocab_{}_{}".format(sp, vocab_size)),
         "train_prefix": base.format(data.format('train', tokenizer, sp)),
         "dev_prefix": base.format(data.format('valid', tokenizer, sp)),
         "test_prefix": base.format(data.format('test', tokenizer, sp)),
@@ -57,11 +57,11 @@ def main(_):
     hyperparameters_space = dict(
 
         # char_seq=[600],
-        # vocab_size=[50000],
         # char_embed=[100],
         # batch_size=[128],
         # lstm_size=[128],
         # bidirectional=[True],
+        vocab_size=[25000],
         num_train_steps= [15000],
         desc_embed=[200],
         split=[True],
@@ -103,7 +103,7 @@ def main(_):
 #$ -o /dev/null
 #$ -e /dev/null
 #$ -t 1-{}
-#$ -l tmem=10G
+#$ -l tmem=11G
 #$ -l h_rt=20:00:00
 #$ -P gpu
 #$ -l gpu=1
