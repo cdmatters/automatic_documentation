@@ -205,9 +205,6 @@ def _build_argparser():
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
                         type=int, default=300,
                         help='size of LSTM size')
-    parser.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
-                       type=str, default='var_only',
-                       help='the type of tokenizer to build the char_sequence: var_only, var_funcname')
     parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
                        type=bool, default=True,
                        help='use bidirectional lstm')
@@ -218,13 +215,13 @@ def _build_argparser():
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs,
                vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, tokenizer, bidirectional, **kwargs):
+               use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset, tokenizer)
+        use_full_dataset, use_split_dataset, tokenizer, no_dups)
     nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
 
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,

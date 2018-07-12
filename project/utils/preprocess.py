@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 import os
 import random
 
@@ -8,7 +9,8 @@ from yaml import CLoader, CDumper
 from yaml.constructor import Constructor
 
 from project.data import preprocessed, data
-
+from project.utils.tokenize import nltk_tok
+random.seed(100)
 
 # Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
 def add_bool(self, node):
@@ -127,6 +129,30 @@ def prep_main_set(test_percentage):
 
     preprocessed.save_data(train_data, test_data, 'unsplit')
 
+def prep_no_duplicates(test_percentage):
+    with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
+        data = yaml.load(f, Loader=CLoader)
+
+    main_data = map_yaml_to_arg_list(data)
+    random.shuffle(main_data)
+    for dups in [1,2,3,4,5,10]:
+        dups_str = str(dups) if dups != 10 else 'X'
+        filtered_data = []
+        c = Counter()
+        for d in main_data:
+            uniq_pair = d['arg_name']+'|'+ " ".join(nltk_tok(d['arg_desc']))
+            c.update({uniq_pair: 1})
+
+            if c[uniq_pair] <= dups:
+                filtered_data.append(d)
+    
+        n = len(filtered_data)
+        print("Total Data Size for NoDup{}: {}".format(dups_str, n))
+        test_data = filtered_data[:int(n * test_percentage)]
+        train_data = filtered_data[int(n * test_percentage):]
+    
+        preprocessed.save_data(train_data, test_data, 'no_dups_{}'.format(dups_str))
+
 
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
@@ -207,6 +233,8 @@ def _build_argparser():
                         default=False, help='prep datasets with train and test from combined repositories')
     parser.add_argument('--prep_separate_repos', '-s', dest='sep_repos', action='store_true',
                         default=False, help='prepare data sets with train and test from different repositories')
+    parser.add_argument('--prep_no_duplicates', '-d', dest='no_dups', action='store_true',
+                        default=False, help='prepare data sets with train and test without duplicates of (name, desc) pairs')
     parser.add_argument('--run-all', '-r', dest='run_all', action='store_true',
                         default=False, help='assimilate and prep both main and overfit datasets')
 
@@ -221,6 +249,7 @@ if __name__ == "__main__":
         prep_main_set(0.3)
         prep_overfit_set(0.3)
         prep_repo_split_set(0.3)
+        prep_no_duplicates(0.3)
     else:
         if args.assimilate:
             assimilate_data()
@@ -230,5 +259,7 @@ if __name__ == "__main__":
             prep_overfit_set(0.3)
         if args.sep_repos:
             prep_repo_split_set(0.3)
+        if args.no_dups:
+            prep_no_duplicates(0.3)
     if not any(vars(args).values()):
         parser.print_help()
