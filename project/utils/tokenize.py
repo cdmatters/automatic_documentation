@@ -26,6 +26,22 @@ def get_special_tokens():
     return [PAD_TOKEN, UNKNOWN_TOKEN, START_OF_TEXT_TOKEN,
             END_OF_TEXT_TOKEN, SEPARATOR_1, SEPARATOR_2, SEPARATOR_3]
 
+def get_hash_string(d):
+    hash_string = []
+    for l in d["arg_name_tokens"]:
+        if l == SEPARATOR_1:
+            hash_string.append("|")
+        elif l == SEPARATOR_2:
+            hash_string.append("-")        
+        elif l == SEPARATOR_3:
+            hash_string.append("+")
+        elif l == END_OF_TEXT_TOKEN:
+            hash_string.append("")    
+        else:
+            hash_string.append(l)
+    return "".join(hash_string)
+
+
 def get_weights_char2idx(char_embed):
     # Weights are random, 300d
     dim = char_embed
@@ -249,12 +265,25 @@ def extract_char_and_desc_idx_tensors(data, char_dim, desc_dim):
     return np.stack(chars), np.stack(descs)
 
 
-def get_data_tuple(use_full_dataset, use_split_dataset):
+def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
     if use_full_dataset:
         if use_split_dataset:
             from project.data.preprocessed.split import split_data as data
         else:
-            from project.data.preprocessed.unsplit import unsplit_data as data
+            if no_dups == 0:
+                from project.data.preprocessed.unsplit import unsplit_data as data
+            elif no_dups == 1:
+                from project.data.preprocessed.no_dups_1 import no_dups_1_data as data
+            elif no_dups == 2:
+                from project.data.preprocessed.no_dups_2 import no_dups_2_data as data
+            elif no_dups == 3:
+                from project.data.preprocessed.no_dups_3 import no_dups_3_data as data
+            elif no_dups == 4:
+                from project.data.preprocessed.no_dups_4 import no_dups_4_data as data
+            elif no_dups == 5:
+                from project.data.preprocessed.no_dups_5 import no_dups_5_data as data
+            elif no_dups == 10:
+                from project.data.preprocessed.no_dups_X import no_dups_X_data as data
     else:
         from project.data.preprocessed.overfit import overfit_data as data
     return data
@@ -271,8 +300,8 @@ def choose_tokenizer(tokenizer):
     return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset, tokenizer='var_only'):
-    data_tuple = get_data_tuple(use_full_dataset, use_split_dataset)
+                                   use_full_dataset, use_split_dataset, tokenizer='var_only', no_dups=0):
+    data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)

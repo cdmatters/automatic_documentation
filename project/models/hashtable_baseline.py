@@ -15,10 +15,11 @@ def default_dict_factory(): return defaultdict(list)
 
 
 class HashtableBaseline(object):
-    def __init__(self, name="Hashtable Model"):
+    def __init__(self, tokenizer_str, name="Hashtable Model"):
         self.name = name
         self.lookup_list = defaultdict(default_dict_factory)
         self.descriptions = []
+        self.tokenizer = tokenize.choose_tokenizer(tokenizer_str)
 
     def __str__(self):
         summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
@@ -47,25 +48,30 @@ class HashtableBaseline(object):
         return nltk.word_tokenize(desc)
 
     def test(self, test_data):
+        _ = defaultdict(int)
+        test_data = self.tokenizer(test_data, _, _)
         translations = []
         for d in test_data:
-            indices = self.lookup_description_indices(d["arg_name"])
+            hash_string = tokenize.get_hash_string(d)
+            indices = self.lookup_description_indices(hash_string)
 
             descriptions = [self.descriptions[i] for i in indices]
             translation = random.choice(descriptions)
 
             translations.append(SingleTranslation(
-                d["arg_name"], self.tok(d["arg_desc"]), self.tok(translation)))
+                hash_string, self.tok(d["arg_desc"]), self.tok(translation)))
         return translations
 
     def train(self, train_data):
+        _ = defaultdict(int)
+        train_data = self.tokenizer(train_data, _, _)
         for i, d in enumerate(train_data):
-            name = d["arg_name"]
-            l = len(d["arg_name"])
+            hash_string = tokenize.get_hash_string(d)
+            l = len(hash_string)
             self.descriptions.append(d["arg_desc"])
 
             for j in range(l):
-                ngrams = self.get_n_grams(j + 1, name)
+                ngrams = self.get_n_grams(j + 1, hash_string)
                 for n in ngrams:
                     self.lookup_list[j][n].append(i)
 
@@ -82,10 +88,10 @@ class HashtableBaseline(object):
         print(bleu_tuple[0]*100)
 
 
-def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, **kwargs):
-    data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset)
+def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, tokenizer, no_dups, **kwargs):
+    data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
 
-    model = HashtableBaseline()
+    model = HashtableBaseline(tokenizer)
 
     summary = ExperimentSummary(
         model, vocab_size, char_seq, desc_seq, None, None, use_full_dataset, use_split_dataset)

@@ -26,6 +26,13 @@ def data_args(parse_fn):
         p.add_argument('--use-split-dataset', '-S', dest='use_split_dataset', action='store_true',
                        default=False,
                        help='use the dataset where train and test args are split by codebase. must be used with full dataset')
+        p.add_argument('--no_dups', '-X', dest='no_dups', action='store',
+                       type=int, default=0,
+                       help='use the complete data set (slow)')
+        p.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
+                       type=str, default='var_only',
+                       help='the type of tokenizer to build the char_sequence: var_only, var_funcname')
+
         return p
     return wrapper
 
@@ -57,7 +64,7 @@ def train_args(parse_fn):
     def wrapper(*args, **kwds):
         p = parse_fn(*args, **kwds)
         p.add_argument('--epochs', '-e', dest='epochs', action='store',
-                       type=int, default=5000,
+                       type=int, default=200,
                        help='minibatch size for model')
         p.add_argument('--learning-rate', '-r', dest='lr', action='store',
                        type=float, default=0.001,
