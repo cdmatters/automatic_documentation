@@ -154,7 +154,7 @@ class CharSeqBaseline(BasicRNNModel):
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
         epoch = 0
         try:
-            recent_losses = [1e8] * 10  # should use a queue
+            recent_losses = [1e8] * 50  # should use a queue
             for i, (e, arg_name, arg_desc) in enumerate(self._to_batch(*data_tuple.train, epochs)):
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
@@ -187,11 +187,12 @@ class CharSeqBaseline(BasicRNNModel):
                         saveload.save(session, log_dir, self.name, i)
 
                     recent_losses.append(valid_evaluation_tuple[-2])
-                    if np.argmin(recent_losses) == 0:
-                        return
-                    else:
-                        recent_losses.pop(0)
-
+                    # if np.argmin(recent_losses) == 0:
+                    #     return
+                    # else:
+                    #     recent_losses.pop(0)
+            saveload.save(session, log_dir, self.name, i)
+            
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
