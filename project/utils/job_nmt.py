@@ -57,19 +57,24 @@ def main(_):
     hyperparameters_space = dict(
 
         # char_seq=[600],
+        # vocab_size=[50000],
         # char_embed=[100],
         # batch_size=[128],
         # lstm_size=[128],
         # bidirectional=[True],
-        vocab_size=[25000],
-        num_train_steps= [15000],
+        num_train_steps= [40000],
         desc_embed=[200],
         split=[True],
         base=['/home/ehambro/EWEEZ/nmt/{}'],
-        tokenizer=['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs'],
-        name=['comp_tokenizer_split'],
         # save_every=[-1],
         # logdir=[log_path]
+
+        # name=['otherargs_alldups'],
+        # no_dups= [2,3,4,10],
+        # tokenizer=['var_otherargs' ],
+        name=['nodup1__all_toks'],
+        no_dups= [1],
+        tokenizer=["var_funcname_otherargs",  'var_funcname', 'var_only', "var_otherargs", ],
     )
 
     configurations = cartesian_product(hyperparameters_space)
@@ -103,8 +108,8 @@ def main(_):
 #$ -o /dev/null
 #$ -e /dev/null
 #$ -t 1-{}
-#$ -l tmem=11G
-#$ -l h_rt=20:00:00
+#$ -l tmem=10G
+#$ -l h_rt=24:00:00
 #$ -P gpu
 #$ -l gpu=1
 

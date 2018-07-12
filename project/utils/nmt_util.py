@@ -91,41 +91,45 @@ def do_symlinks(tokenizers, name):
 def gen_full_data_dir(char_embed, desc_embed, vocab_size):
     gen_embed_file(desc_embed)
     vocab_size = 35000
+    for no_dups in [0,1,2,3,4,5,10]:
+        for data_split in [True, False]:
+            if data_split == True and no_dups > 0:
+                continue
 
-    for data_split in [True, False]:
-        data_tuple = get_data_tuple(use_full_dataset=True, use_split_dataset=data_split)
+            data_tuple = get_data_tuple(use_full_dataset=True, use_split_dataset=data_split, no_dups=no_dups)
+            
+            name = 'split' if data_split else 'unsplit'
+            name += '_nd{}'.format(no_dups)
         
-        name = 'split' if data_split else 'unsplit'
+            gen_char_vocab_file(name)
+            gen_desc_vocab_file(data_tuple.train, vocab_size, desc_embed, name)
+            
+            print("Loading GloVe weights and word to index lookup table")
+            word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
+            print("Creating char to index look up table")
+            char_weights, char2idx = get_weights_char2idx(char_embed)
+            
+            tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
+            for t in tokenizers:
+                tokenizer = choose_tokenizer(t)
     
-        gen_char_vocab_file(name)
-        gen_desc_vocab_file(data_tuple.train, vocab_size, desc_embed, name)
+                train_data = tokenizer(data_tuple.train, word2idx, char2idx)
+                valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
+                test_data = tokenizer(data_tuple.test, word2idx, char2idx)
         
-        print("Loading GloVe weights and word to index lookup table")
-        word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
-        print("Creating char to index look up table")
-        char_weights, char2idx = get_weights_char2idx(char_embed)
-        
-        tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
-        for t in tokenizers:
-            tokenizer = choose_tokenizer(t)
-
-            train_data = tokenizer(data_tuple.train, word2idx, char2idx)
-            valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
-            test_data = tokenizer(data_tuple.test, word2idx, char2idx)
+                write_char_data_to_file(train_data, 'train_{}_{}'.format(t,name))
+                write_char_data_to_file(valid_data, 'valid_{}_{}'.format(t,name))
+                write_char_data_to_file(test_data, 'test_{}_{}'.format(t,name))
     
-            write_char_data_to_file(train_data, 'train_{}_{}'.format(t,name))
-            write_char_data_to_file(valid_data, 'valid_{}_{}'.format(t,name))
-            write_char_data_to_file(test_data, 'test_{}_{}'.format(t,name))
-
-        do_symlinks(tokenizers, name)
-
+            do_symlinks(tokenizers, name)
+    
 
 
 if __name__ == "__main__":
-    # gen_full_data_dir(200,200,35000)
-    tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
+    gen_full_data_dir(200,200,35000)
+    # tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
 
-    do_symlinks(tokenizers, "unsplit")
+    # do_symlinks(tokenizers, "unsplit")
 
     # gen_embed_file(200)
 
