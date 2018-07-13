@@ -54,7 +54,7 @@
     "tgt_max_len": 300,
     "tgt_max_len_infer": 150,
     "tgt_vocab_file": "/home/ehambro/EWEEZ/project/nmt/nmt_data/vocab_split.de",
-    "tgt_vocab_size": 35012,
+    "tgt_vocab_size": 25000,
     "time_major": "true",
     "train_prefix":" /home/ehambro/EWEEZ/project/nmt/nmt_data/train_split" ,
     "unit_type": "lstm",

@@ -36,12 +36,14 @@ def to_cmd(**kwargs):
                          for k, v in default_args.items()])
     return COMMAND.format(args=arg_list)
 
-def to_data_dirs(base, tokenizer, desc_embed, split, vocab_size, **kwargs):
+def to_data_dirs(base, tokenizer, desc_embed, split, no_dups,  **kwargs):
     sp = 'split' if split else 'unsplit'
+    sp += '_nd{}'.format(no_dups)
+
     data = "nmt_data/{}_{}_{}"
     return {
         "embed_prefix": base.format("nmt_data/glove_inserted.{}.txt".format(desc_embed)),
-        "vocab_prefix": base.format("nmt_data/vocab_{}_{}".format(sp, vocab_size)),
+        "vocab_prefix": base.format("nmt_data/vocab_{}".format(sp)),
         "train_prefix": base.format(data.format('train', tokenizer, sp)),
         "dev_prefix": base.format(data.format('valid', tokenizer, sp)),
         "test_prefix": base.format(data.format('test', tokenizer, sp)),
@@ -64,7 +66,7 @@ def main(_):
         # bidirectional=[True],
         num_train_steps= [40000],
         desc_embed=[200],
-        split=[True],
+        split=[False],
         base=['/home/ehambro/EWEEZ/nmt/{}'],
         # save_every=[-1],
         # logdir=[log_path]
@@ -109,7 +111,7 @@ def main(_):
 #$ -e /dev/null
 #$ -t 1-{}
 #$ -l tmem=10G
-#$ -l h_rt=24:00:00
+#$ -l h_rt=12:00:00
 #$ -P gpu
 #$ -l gpu=1
 

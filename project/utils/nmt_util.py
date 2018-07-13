@@ -1,5 +1,7 @@
 from collections import Counter
+import multiprocessing
 import os
+
 
 import numpy as np
 from project.utils.tokenize import get_data_tuple, choose_tokenizer, \
@@ -88,41 +90,84 @@ def do_symlinks(tokenizers, name):
         os.symlink('valid_{}.de'.format(name), NMT_PATH.format('valid_{}_{}.de'.format(t,name)))
         os.symlink('test_{}.de'.format(name), NMT_PATH.format('test_{}_{}.de'.format(t,name)))
 
+def gen_single_data_dir(data_split, no_dups, vocab_size, desc_embed, char_embed ):
+    name = 'split' if data_split else 'unsplit'
+    name += '_nd{}'.format(no_dups)
+
+    data_tuple = get_data_tuple(use_full_dataset=True, use_split_dataset=data_split, no_dups=no_dups)
+
+    gen_char_vocab_file(name)
+    gen_desc_vocab_file(data_tuple.train, vocab_size, desc_embed, name)
+
+    print("Loading GloVe weights and word to index lookup table")
+    word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
+    print("Creating char to index look up table")
+    char_weights, char2idx = get_weights_char2idx(char_embed)
+
+    tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
+    for t in tokenizers:
+        tokenizer = choose_tokenizer(t)
+
+        train_data = tokenizer(data_tuple.train, word2idx, char2idx)
+        valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
+        test_data = tokenizer(data_tuple.test, word2idx, char2idx)
+
+        write_char_data_to_file(train_data, 'train_{}_{}'.format(t,name))
+        write_char_data_to_file(valid_data, 'valid_{}_{}'.format(t,name))
+        write_char_data_to_file(test_data, 'test_{}_{}'.format(t,name))
+
+    write_desc_data_to_file(train_data, 'train_{}'.format(name))
+    write_desc_data_to_file(valid_data, 'valid_{}'.format(name))
+    write_desc_data_to_file(test_data, 'test_{}'.format(name))
+
+    do_symlinks(tokenizers, name)
+
+
 def gen_full_data_dir(char_embed, desc_embed, vocab_size):
     gen_embed_file(desc_embed)
-    vocab_size = 35000
+    vocab_size = 25000
+    jobs = []
     for no_dups in [0,1,2,3,4,5,10]:
         for data_split in [True, False]:
             if data_split == True and no_dups > 0:
                 continue
+            args = (data_split, no_dups, vocab_size, desc_embed, char_embed )
+            proc = multiprocessing.Process(target=gen_single_data_dir, args=args)
 
-            data_tuple = get_data_tuple(use_full_dataset=True, use_split_dataset=data_split, no_dups=no_dups)
-            
-            name = 'split' if data_split else 'unsplit'
-            name += '_nd{}'.format(no_dups)
-        
-            gen_char_vocab_file(name)
-            gen_desc_vocab_file(data_tuple.train, vocab_size, desc_embed, name)
-            
-            print("Loading GloVe weights and word to index lookup table")
-            word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
-            print("Creating char to index look up table")
-            char_weights, char2idx = get_weights_char2idx(char_embed)
-            
-            tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
-            for t in tokenizers:
-                tokenizer = choose_tokenizer(t)
-    
-                train_data = tokenizer(data_tuple.train, word2idx, char2idx)
-                valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
-                test_data = tokenizer(data_tuple.test, word2idx, char2idx)
-        
-                write_char_data_to_file(train_data, 'train_{}_{}'.format(t,name))
-                write_char_data_to_file(valid_data, 'valid_{}_{}'.format(t,name))
-                write_char_data_to_file(test_data, 'test_{}_{}'.format(t,name))
-    
-            do_symlinks(tokenizers, name)
-    
+            proc.start()
+            jobs.append(proc)
+    [p.join() for p in jobs]
+            # data_tuple = get_data_tuple(use_full_dataset=True, use_split_dataset=data_split, no_dups=no_dups)
+
+            # name = 'split' if data_split else 'unsplit'
+            # name += '_nd{}'.format(no_dups)
+
+            # gen_char_vocab_file(name)
+            # gen_desc_vocab_file(data_tuple.train, vocab_size, desc_embed, name)
+
+            # print("Loading GloVe weights and word to index lookup table")
+            # word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
+            # print("Creating char to index look up table")
+            # char_weights, char2idx = get_weights_char2idx(char_embed)
+
+            # tokenizers = ['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs']
+            # for t in tokenizers:
+            #     tokenizer = choose_tokenizer(t)
+
+            #     train_data = tokenizer(data_tuple.train, word2idx, char2idx)
+            #     valid_data = tokenizer(data_tuple.valid, word2idx, char2idx)
+            #     test_data = tokenizer(data_tuple.test, word2idx, char2idx)
+
+            #     write_char_data_to_file(train_data, 'train_{}_{}'.format(t,name))
+            #     write_char_data_to_file(valid_data, 'valid_{}_{}'.format(t,name))
+            #     write_char_data_to_file(test_data, 'test_{}_{}'.format(t,name))
+
+            # write_desc_data_to_file(train_data, 'train_{}'.format(name))
+            # write_desc_data_to_file(valid_data, 'valid_{}'.format(name))
+            # write_desc_data_to_file(test_data, 'test{}'.format(name))
+
+            # do_symlinks(tokenizers, name)
+
 
 
 if __name__ == "__main__":
