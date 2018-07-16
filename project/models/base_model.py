@@ -253,7 +253,7 @@ class BasicRNNModel(abc.ABC):
         else:
             return [lookup[i] for i in translate_id]
 
-    def _feed_fwd(self, session, input_data, input_labels, operation, mode=None):
+    def _feed_fwd(self, session, minibatch_data, operation, mode=None):
         """
         Evaluates a node in the graph
         Args
@@ -265,14 +265,15 @@ class BasicRNNModel(abc.ABC):
             output of the operation
         """
         run_ouputs = operation
-        feed_dict = {self.input_data_sequence: input_data,
-                     self.input_label_sequence: input_labels}
+        feed_dict = {self.input_data_sequence: minibatch_data[0],
+                     self.input_label_sequence: minibatch_data[1]}
         if mode == 'TRAIN':
             feed_dict[self.dropout_keep_prob] = 1 - self.dropout
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 
-    def _to_batch(self, arg_name, arg_desc, epochs=1, do_prog_bar=False):
+    def _to_batch(self, full_data, epochs=1, do_prog_bar=False):
+        arg_name, arg_desc = full_data 
         assert arg_name.shape[0] == arg_desc.shape[0]
         size = arg_name.shape[0]
 
@@ -289,7 +290,7 @@ class BasicRNNModel(abc.ABC):
 
                 arg_name_batch = arg_name[idx_start: idx_end]
                 arg_desc_batch = arg_desc[idx_start: idx_end]
-                yield e, arg_name_batch, arg_desc_batch
+                yield e, (arg_name_batch, arg_desc_batch)
 
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
@@ -298,10 +299,11 @@ class BasicRNNModel(abc.ABC):
         all_training_loss = []
 
         ops = [self.merged_metrics, self.train_loss, self.inference_id]
-        for _, arg_name, arg_desc in self._to_batch(data[0][:max_points], data[1][:max_points]):
+        restricted_data = tuple([d[:max_points] for d in data])
+        for _, minibatch in self._to_batch(restricted_data):
 
             metrics, train_loss, inference_ids = self._feed_fwd(
-                session, arg_name, arg_desc, ops)
+                session, minibatch, ops)
 
             # Translating quirks:
             #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
@@ -310,6 +312,7 @@ class BasicRNNModel(abc.ABC):
             #                     because compute_bleu takes multiple references
             #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
             #                  NOT: ['this', 'translation', '<END>']
+            arg_name, arg_desc = minibatch
             names = [self.translate(i, lookup=self.idx2char).replace(
                 " ", "") for i in arg_name]
             references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]

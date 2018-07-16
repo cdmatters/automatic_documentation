@@ -55,7 +55,7 @@ def get_weights_char2idx(char_embed):
     char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
 
     char_weights = np.random.uniform(
-        low=-0.1, high=0.1, size=[len(arg_alphabet)+1, dim])
+        low=-0.1, high=0.1, size=[len(char2idx.keys())+1, dim])
     return (char_weights, char2idx)
 
 
