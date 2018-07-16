@@ -26,7 +26,7 @@ def data_args(parse_fn):
         p.add_argument('--use-split-dataset', '-S', dest='use_split_dataset', action='store_true',
                        default=False,
                        help='use the dataset where train and test args are split by codebase. must be used with full dataset')
-        p.add_argument('--no_dups', '-X', dest='no_dups', action='store',
+        p.add_argument('--no-dups', '-X', dest='no_dups', action='store',
                        type=int, default=0,
                        help='use the complete data set (slow)')
         p.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
