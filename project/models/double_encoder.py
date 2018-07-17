@@ -22,7 +22,7 @@ LOGGER = logging.getLogger('')
 SingleTranslationWithCode = namedtuple(
     "Translation", ['name', 'description', 'translation', 'code'])
 SingleTranslationWithCode.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nINFR: {}\n".format(
-    s.name, " ".join(s.description), " ".join(s.translation))
+    s.name, " ".join(s.code)," ".join(s.description), " ".join(s.translation))
 
 
 class DoubleEncoderBaseline(BasicRNNModel):
