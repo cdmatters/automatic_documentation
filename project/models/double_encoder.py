@@ -1,10 +1,13 @@
 # -*- coding: utf-8 -*-
 import argparse
 import logging
+from collections import namedtuple
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
+from project.external.nmt import bleu
 from project.models.base_model import BasicRNNModel, ExperimentSummary
 import project.utils.args as args
 import project.utils.logging as log_util
@@ -15,6 +18,11 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 
 
 LOGGER = logging.getLogger('')
+
+SingleTranslationWithCode = namedtuple(
+    "Translation", ['name', 'description', 'translation', 'code'])
+SingleTranslationWithCode.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nINFR: {}\n".format(
+    s.name, " ".join(s.description), " ".join(s.translation))
 
 
 class DoubleEncoderBaseline(BasicRNNModel):
@@ -112,28 +120,30 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 
             
             # 3. Build out Cell ith attention
+            decoder_rnn_size = self.rnn_size + self.second_rnn_size
             if self.bidirectional:
+                decoder_rnn_size = decoder_rnn_size * 2
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
                     (self.rnn_size + self.second_rnn_size) * 2, name="RNNencoder")
             else:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    (self.rnn_size + self.second_rnn_size), name="RNNencoder")
+                    decoder_rnn_size, name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
                 desc_vocab_size, use_bias=False)
 
 
-            
             attention_mechanism1 = tf.contrib.seq2seq.LuongAttention(
-                (self.rnn_size + self.second_rnn_size), first_encoder_outputs,
+                decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
+            
 
-            attention_mechanism2 = tf.contrib.seq2seq.LuongAttention(
-                (self.rnn_size + self.second_rnn_size), second_encoder_outputs,
-                memory_sequence_length=second_data_seq_length,
-                name="LuongAttention2")
+            # attention_mechanism2 = tf.contrib.seq2seq.LuongAttention(
+            #     decoder_rnn_size, second_encoder_outputs,
+            #     memory_sequence_length=second_data_seq_length,
+            #     name="LuongAttention2")
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
@@ -186,7 +196,55 @@ class DoubleEncoderBaseline(BasicRNNModel):
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
+    
+    def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
+        all_names = []
+        all_references = []
+        all_translations = []
+        all_training_loss = []
+        all_src_code = []
 
+        ops = [self.merged_metrics, self.train_loss, self.inference_id]
+        restricted_data = tuple([d[:max_points] for d in data])
+        for _, minibatch in self._to_batch(restricted_data):
+
+            metrics, train_loss, inference_ids = self._feed_fwd(
+                session, minibatch, ops)
+
+            # Translating quirks:
+            #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
+            #    references: RETURN: [['<START>', 'this', 'reference', '<END>']] 
+            #                NOT: ['<START>', 'this', 'reference','<END>'],
+            #                     because compute_bleu takes multiple references
+            #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
+            #                  NOT: ['this', 'translation', '<END>']
+            arg_name, arg_desc, src = minibatch[0], minibatch[1], minibatch[2]
+            names = [self.translate(i, lookup=self.idx2char).replace(
+                " ", "") for i in arg_name]
+            src_code = [self.translate(i, do_join=False) for i in src]
+            references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
+            translations = [self.translate(
+                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN])[1:-1] for i in inference_ids]
+
+            all_training_loss.append(train_loss)
+            all_names.extend(names)
+            all_references.extend(references)
+            all_translations.extend(translations)
+            all_src_code.extend(src_code)
+
+        # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
+        # To Do: Replace with NLTK:
+        #         smoother = SmoothingFunction()
+        #         bleu_score = corpus_bleu(all_references, all_translations, 
+        #                                  smoothing_function=smoother.method2)
+        bleu_tuple = bleu.compute_bleu(
+            all_references, all_translations, max_order=4, smooth=False)
+        av_loss = np.mean(all_training_loss)
+
+        translations = [SingleTranslationWithCode(n, d[0], t, s) for n, d, t, s in zip(
+            all_names, all_references, all_translations, all_src_code)]
+
+        return bleu_tuple, av_loss, translations[:max_translations]
     def _feed_fwd(self, session, minibatch, operation, mode=None):
         """
         Evaluates a node in the graph
