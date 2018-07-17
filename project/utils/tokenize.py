@@ -251,18 +251,35 @@ def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx)
     return data
 
 
-def extract_char_and_desc_idx_tensors(data, char_dim, desc_dim):
+
+def tokenize_src_all_basic_tokens(data, word2idx):
+    for i, d in enumerate(data):
+        unk_token = word2idx[UNKNOWN_TOKEN]
+        src_tok = nltk_tok(d['src'])
+        
+        d['src_tokens'] = [w if w in word2idx else UNKNOWN_TOKEN for w in src_tok]
+        d['src_idx'] = [word2idx.get(t, unk_token) for t in src_tok]
+    
+    return data
+
+
+def extract_char_and_desc_code_idx_tensors(data, char_seq, desc_seq, code_seq):
     chars = []
     descs = []
+    code = []
     for d in data:
         char_pad = [d['arg_name_idx'][i] if i < len(
-            d['arg_name_idx']) else 0 for i in range(char_dim)]
+            d['arg_name_idx']) else 0 for i in range(char_seq)]
         chars.append(np.array(char_pad))
 
         desc_pad = [d['arg_desc_idx'][i] if i < len(
-            d['arg_desc_idx']) else 0 for i in range(desc_dim)]
+            d['arg_desc_idx']) else 0 for i in range(desc_seq)]
         descs.append(np.array(desc_pad))
-    return np.stack(chars), np.stack(descs)
+
+        code_pad = [d['src_idx'][i] if i < len(
+            d['src_idx']) else 0 for i in range(code_seq)]
+        code.append(np.array(code_pad))
+    return np.stack(chars), np.stack(descs), np.stack(code)
 
 
 def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
@@ -288,6 +305,11 @@ def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
         from project.data.preprocessed.overfit import overfit_data as data
     return data
 
+def choose_code_tokenizer(tokenizer):
+    if tokenizer == 'full':
+        tokenize = tokenize_src_all_basic_tokens
+    return tokenize
+
 def choose_tokenizer(tokenizer):
     if tokenizer == 'var_only':
         tokenize = tokenize_vars_and_descriptions
@@ -300,7 +322,7 @@ def choose_tokenizer(tokenizer):
     return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset, tokenizer='var_only', no_dups=0):
+                                   use_full_dataset, use_split_dataset, tokenizer='var_only', no_dups=0, code_tokenizer="full"):
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
 
     print("Loading GloVe weights and word to index lookup table")
@@ -308,20 +330,26 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
 
-    tokenize = choose_tokenizer(tokenizer)
+    input_tokenize = choose_tokenizer(tokenizer)
+    print("Tokenizing the word descriptions and characters")
+    train_data = input_tokenize(data_tuple.train, word2idx, char2idx)
+    valid_data = input_tokenize(data_tuple.valid, word2idx, char2idx)
+    test_data = input_tokenize(data_tuple.test, word2idx, char2idx)
 
-    print("Tokenizing the word desctiptions and characters")
-    train_data = tokenize(data_tuple.train, word2idx, char2idx)
-    valid_data = tokenize(data_tuple.valid, word2idx, char2idx)
-    test_data = tokenize(data_tuple.test, word2idx, char2idx)
-
+    code_tokenize = choose_code_tokenizer(code_tokenizer)
+    print("Tokenizing the src code")
+    train_data = code_tokenize(data_tuple.train, word2idx)
+    valid_data = code_tokenize(data_tuple.valid, word2idx)
+    test_data = code_tokenize(data_tuple.test, word2idx)
+    
     print("Extracting tensors train and test")
-    train_data = extract_char_and_desc_idx_tensors(
-        train_data, char_seq, desc_seq)
-    valid_data = extract_char_and_desc_idx_tensors(
-        valid_data, char_seq, desc_seq)
-    test_data = extract_char_and_desc_idx_tensors(
-        test_data, char_seq, desc_seq)
+    code_seq = 200
+    train_data = extract_char_and_desc_code_idx_tensors(
+        train_data, char_seq, desc_seq, code_seq)
+    valid_data = extract_char_and_desc_code_idx_tensors(
+        valid_data, char_seq, desc_seq, code_seq)
+    test_data = extract_char_and_desc_code_idx_tensors(
+        test_data, char_seq, desc_seq, code_seq)
     # print(train_data.shape)
     return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, valid_data, test_data, "Tensors")
 

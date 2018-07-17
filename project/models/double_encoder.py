@@ -17,7 +17,7 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 LOGGER = logging.getLogger('')
 
 
-class CharSeqBaseline(BasicRNNModel):
+class DoubleEncoderBaseline(BasicRNNModel):
 
     def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
                 dropout=0.3, bidirectional=False, name="BasicModel"):
@@ -27,6 +27,7 @@ class CharSeqBaseline(BasicRNNModel):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.rnn_size = rnn_size
+        self.second_rnn_size = 128
         self.dropout = dropout
         self.bidirectional = bidirectional
 
@@ -65,11 +66,16 @@ class CharSeqBaseline(BasicRNNModel):
             input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
             input_data_seq_length = tf.argmin(
                 input_data_sequence, axis=1, output_type=tf.int32) + 1
+            # # second_data_sequence : [batch_size x max_variable_length]
+            second_data_sequence = tf.placeholder(tf.int32, [None, None], "code_seq")
+            second_data_seq_length = tf.argmin(
+                second_data_sequence, axis=1, output_type=tf.int32) + 1
             # # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
             input_label_seq_length = tf.argmin(
                 input_label_sequence, axis=1, output_type=tf.int32) + 1
             dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
+
 
             # 1. Get Embeddings
             encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
@@ -78,27 +84,56 @@ class CharSeqBaseline(BasicRNNModel):
 
             # 2. Build out Encoder
             if self.bidirectional:
-                encoder_outputs, state = self._build_bi_rnn_encoder(
-                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
-            else:
-                encoder_outputs, state = self._build_rnn_encoder(
-                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
+                first_encoder_outputs, first_state = self._build_bi_rnn_encoder(
+                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob, name="FirstRNN")
 
+                second_encoder_outputs, second_state = self._build_bi_rnn_encoder(
+                    second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
+                
+                c = tf.concat([first_state[0,:,:], second_state[0,:,:]], axis = 1)
+                h = tf.concat([first_state[1,:,:], second_state[1,:,:]], axis = 1)
+                state = tf.contrib.rnn.LSTMStateTuple(c, h)
+                # state = tf.concat([first_state, second_state], axis = 2)
+
+
+                # encoder_outputs = tf.concat([first_encoder_outputs, second_encoder_outputs], axis = 1)
+            else:
+                first_encoder_outputs, first_state = self._build_rnn_encoder(
+                    input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
+                second_encoder_outputs, second_state = self._build_rnn_encoder(
+                    second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
+
+                c = tf.concat([first_state.c, second_state.c], axis = 1)
+                h = tf.concat([first_state.h, second_state.h], axis = 1)
+                state = tf.contrib.rnn.LSTMStateTuple(c, h)
+
+                # state = tf.concat([first_state, second_state], axis = 2)
+                # encoder_outputs = tf.concat([first_encoder_outputs, second_encoder_outputs], axis = 1)
+                
+            
             # 3. Build out Cell ith attention
             if self.bidirectional:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    self.rnn_size * 2, name="RNNencoder")
+                    (self.rnn_size + self.second_rnn_size) * 2, name="RNNencoder")
             else:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    self.rnn_size, name="RNNencoder")
+                    (self.rnn_size + self.second_rnn_size), name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
                 desc_vocab_size, use_bias=False)
 
-            attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-                self.rnn_size, encoder_outputs,
-                memory_sequence_length=input_data_seq_length)
+
+            
+            attention_mechanism1 = tf.contrib.seq2seq.LuongAttention(
+                (self.rnn_size + self.second_rnn_size), first_encoder_outputs,
+                memory_sequence_length=input_data_seq_length,
+                name="LuongAttention1")
+
+            attention_mechanism2 = tf.contrib.seq2seq.LuongAttention(
+                (self.rnn_size + self.second_rnn_size), second_encoder_outputs,
+                memory_sequence_length=second_data_seq_length,
+                name="LuongAttention2")
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
@@ -107,8 +142,12 @@ class CharSeqBaseline(BasicRNNModel):
                 state_keep_prob=dropout_keep_prob)
 
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
-                decoder_rnn_cell, attention_mechanism,
+                decoder_rnn_cell, attention_mechanism1,
                 attention_layer_size=self.rnn_size)
+
+            # decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+            #     decoder_rnn_cell, attention_mechanism2,
+            #     attention_layer_size=self.second_rnn_size)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
@@ -138,6 +177,7 @@ class CharSeqBaseline(BasicRNNModel):
 
             # 8. Save Variables to Model
             self.input_data_sequence = input_data_sequence
+            self.second_data_sequence = second_data_sequence
             self.input_label_sequence = input_label_sequence
             self.dropout_keep_prob = dropout_keep_prob
             self.update = update
@@ -146,6 +186,28 @@ class CharSeqBaseline(BasicRNNModel):
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
+
+    def _feed_fwd(self, session, minibatch, operation, mode=None):
+        """
+        Evaluates a node in the graph
+        Args
+            session: session that is being run
+            input_data, array: batch of comments
+            input_labels, array: batch of labels
+            operation: node in graph to be evaluated
+        Returns
+            output of the operation
+        """
+        input_data, input_labels, input_code = minibatch
+        run_ouputs = operation
+        feed_dict = {self.input_data_sequence: input_data,
+                     self.input_label_sequence: input_labels,
+                     self.second_data_sequence: input_code }
+        if mode == 'TRAIN':
+            feed_dict[self.dropout_keep_prob] = 1 - self.dropout
+
+        return session.run(run_ouputs, feed_dict=feed_dict)
+
 
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
         epoch = 0
@@ -192,7 +254,6 @@ class CharSeqBaseline(BasicRNNModel):
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
-
 @args.log_args
 @args.train_args
 @args.data_args
@@ -203,7 +264,7 @@ def _build_argparser():
                         type=int, default=300,
                         help='size of LSTM size')
     parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
-                       type=bool, default=True,
+                       type=int, default=1,
                        help='use bidirectional lstm')
 
     return parser
@@ -216,10 +277,13 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
+    code_tokenizer = 'full'
+    # bidirectional = False #DELETE
+    bidirectional = bidirectional > 0
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset, tokenizer, no_dups)
-    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
+        use_full_dataset, use_split_dataset, tokenizer, no_dups, code_tokenizer)
+    nn = DoubleEncoderBaseline(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional)
 
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)

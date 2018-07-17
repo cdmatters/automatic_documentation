@@ -113,11 +113,11 @@ class BasicRNNModel(abc.ABC):
             return encode_embedded, decode_embedded, char_embedding, word_embedding
 
     @staticmethod
-    def _build_bi_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
+    def _build_bi_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob, name="RNNencoder"):
         with tf.name_scope("encoder"):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell_fw = tf.contrib.rnn.BasicLSTMCell(
-                rnn_size, name="RNNencoder")
+                rnn_size, name=name)
             initial_state_fw = encoder_rnn_cell_fw.zero_state(
                 batch_size, dtype=tf.float32)
 
@@ -127,7 +127,7 @@ class BasicRNNModel(abc.ABC):
                                                              state_keep_prob=dropout_keep_prob)
 
             encoder_rnn_cell_bk = tf.contrib.rnn.BasicLSTMCell(
-                rnn_size, name="RNNencoder")
+                rnn_size, name=name)
             initial_state_bk = encoder_rnn_cell_bk.zero_state(
                 batch_size, dtype=tf.float32)
             
@@ -140,7 +140,7 @@ class BasicRNNModel(abc.ABC):
                                                   encode_embedded,
                                                   sequence_length=input_data_seq_length,
                                                   initial_state_fw=initial_state_fw,
-                                                  initial_state_bk=initial_state_bk,
+                                                  initial_state_bw=initial_state_bk,
                                                   time_major=False)
 
 
@@ -148,11 +148,11 @@ class BasicRNNModel(abc.ABC):
 
 
     @staticmethod
-    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob):
+    def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob, name="RNNencoder"):
         with tf.name_scope("encoder"):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                rnn_size, name="RNNencoder")
+                rnn_size, name=name)
             initial_state = encoder_rnn_cell.zero_state(
                 batch_size, dtype=tf.float32)
 
@@ -273,24 +273,25 @@ class BasicRNNModel(abc.ABC):
         return session.run(run_ouputs, feed_dict=feed_dict)
 
     def _to_batch(self, full_data, epochs=1, do_prog_bar=False):
-        arg_name, arg_desc = full_data 
-        assert arg_name.shape[0] == arg_desc.shape[0]
-        size = arg_name.shape[0]
+        # arg_name, arg_desc, arg_code = full_data 
+        # assert arg_name.shape[0] == arg_desc.shape[0]
+        size = full_data[0].shape[0]
 
         batch_per_epoch = (size // self.batch_size) + 1
 
         for e in range(epochs):
-            zipped = list(zip(arg_name, arg_desc))
+            zipped = list(zip(*full_data))
             np.random.shuffle(zipped)
-            arg_name, arg_desc = zip(*zipped)
+            shuffled = list(zip(*zipped))
 
             for i in range(batch_per_epoch):
                 idx_start = i * self.batch_size
                 idx_end = (i + 1) * self.batch_size
 
-                arg_name_batch = arg_name[idx_start: idx_end]
-                arg_desc_batch = arg_desc[idx_start: idx_end]
-                yield e, (arg_name_batch, arg_desc_batch)
+                mb_data = [d[idx_start: idx_end] for d in shuffled]
+                # arg_name_batch = arg_name[idx_start: idx_end]
+                # arg_desc_batch = arg_desc[idx_start: idx_end]
+                yield e, tuple(mb_data)
 
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
@@ -312,7 +313,7 @@ class BasicRNNModel(abc.ABC):
             #                     because compute_bleu takes multiple references
             #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
             #                  NOT: ['this', 'translation', '<END>']
-            arg_name, arg_desc = minibatch
+            arg_name, arg_desc = minibatch[0], minibatch[1]
             names = [self.translate(i, lookup=self.idx2char).replace(
                 " ", "") for i in arg_name]
             references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
