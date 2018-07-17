@@ -245,6 +245,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
             all_names, all_references, all_translations, all_src_code)]
 
         return bleu_tuple, av_loss, translations[:max_translations]
+    
     def _feed_fwd(self, session, minibatch, operation, mode=None):
         """
         Evaluates a node in the graph
@@ -319,7 +320,7 @@ def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the basic LSTM model on the overfit dataset')
     parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
-                        type=int, default=300,
+                        type=int, default=128,
                         help='size of LSTM size')
     parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
                        type=int, default=1,
@@ -346,7 +347,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 
-    LOGGER.warning("Printing to {}".format(log_path))
+    LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
     LOGGER.multiline_info(summary)
 
     init = tf.group(tf.global_variables_initializer(),
