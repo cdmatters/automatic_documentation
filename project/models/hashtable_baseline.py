@@ -5,6 +5,7 @@ import random
 random.seed(100)
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import nltk
+import numpy as np
 
 from project.external.nmt import bleu
 from project.models.base_model import ExperimentSummary, SingleTranslation
@@ -80,11 +81,13 @@ class HashtableBaseline(object):
         self.train(train_data)
         translations = self.test(test_data)
         bleu_tuple = self.evaluate(translations)
-        print(bleu_tuple[0]*100)
+        bleu = bleu_tuple[0]*100
+        print(bleu)
+        return bleu
 
 
 def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, tokenizer, 
-               no_dups, desc_embed, char_embed, **kwargs):
+               no_dups, desc_embed, char_embed, n_times, **kwargs):
     data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
     print("Loading GloVe weights and word to index lookup table")
 
@@ -100,13 +103,22 @@ def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_datas
         model, vocab_size, char_seq, desc_seq, None, None, use_full_dataset, use_split_dataset)
     print(summary)
 
-    model.main(train_data, valid_data)
+    results = []
+    for i in range(n_times):
+        random.seed(i)
+        results.append(model.main(train_data, valid_data))
+
+    print("{:.5f} +/- {:.5f}".format(np.mean(results), np.std(results)))
+
 
 
 @args.data_args
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the non-neural hashtable baseline')
+    parser.add_argument('--no-times', '-N', dest='n_times', action='store',
+                       type=int, default=1,
+                       help='no of times (print std dev & mean')
     return parser
 
 
