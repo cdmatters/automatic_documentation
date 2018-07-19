@@ -15,11 +15,10 @@ def default_dict_factory(): return defaultdict(list)
 
 
 class HashtableBaseline(object):
-    def __init__(self, tokenizer_str, name="Hashtable Model"):
+    def __init__(self, name="Hashtable Model"):
         self.name = name
         self.lookup_list = defaultdict(default_dict_factory)
         self.descriptions = []
-        self.tokenizer = tokenize.choose_tokenizer(tokenizer_str)
 
     def __str__(self):
         summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
@@ -48,8 +47,6 @@ class HashtableBaseline(object):
         return nltk.word_tokenize(desc)
 
     def test(self, test_data):
-        _ = defaultdict(int)
-        test_data = self.tokenizer(test_data, _, _)
         translations = []
         for d in test_data:
             hash_string = tokenize.get_hash_string(d)
@@ -63,8 +60,6 @@ class HashtableBaseline(object):
         return translations
 
     def train(self, train_data):
-        _ = defaultdict(int)
-        train_data = self.tokenizer(train_data, _, _)
         for i, d in enumerate(train_data):
             hash_string = tokenize.get_hash_string(d)
             l = len(hash_string)
@@ -88,16 +83,24 @@ class HashtableBaseline(object):
         print(bleu_tuple[0]*100)
 
 
-def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, tokenizer, no_dups, **kwargs):
+def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, tokenizer, 
+               no_dups, desc_embed, char_embed, **kwargs):
     data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
+    print("Loading GloVe weights and word to index lookup table")
 
-    model = HashtableBaseline(tokenizer)
+    _, word2idx = tokenize.get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
+    _ = defaultdict(int)
 
+    this_tokenizer = tokenize.choose_tokenizer(tokenizer)
+    train_data = this_tokenizer(data_tuple.train, word2idx, _)
+    valid_data = this_tokenizer(data_tuple.valid, word2idx, _)
+
+    model = HashtableBaseline()
     summary = ExperimentSummary(
         model, vocab_size, char_seq, desc_seq, None, None, use_full_dataset, use_split_dataset)
     print(summary)
 
-    model.main(data_tuple.train, data_tuple.valid)
+    model.main(train_data, valid_data)
 
 
 @args.data_args
