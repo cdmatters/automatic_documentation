@@ -55,7 +55,7 @@ def assimilate_data():
             if yaml_file == 'error.yaml':
                 continue
             with open(RAWDATADIR + "/{}/{}".format(t, yaml_file), "r", encoding='utf-8') as f:
-                string = '\n'.join([_ad_hoc_clean(yaml_file, l)
+                string = ''.join([_ad_hoc_clean(yaml_file, l)
                                     for l in f.readlines()])
                 data = yaml.load(string.replace(
                     "            desc: `", "            desc: \\`").replace(
@@ -83,7 +83,7 @@ def assimilate_data():
             all_files["TOTAL__"] = {"funcs": tot_f, "args": tot_args}
             f.write(pyaml.dump(all_files))
         with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "w") as f:
-            f.write(yaml.dump(all_data, Dumper=CDumper))
+            f.write(pyaml.dump(all_data))#, Dumper=CDumper))
 
     for t in types:
         print("Assimilated, now test loading...")

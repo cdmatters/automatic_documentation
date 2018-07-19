@@ -1,8 +1,9 @@
 from collections import namedtuple
 import os
 
-from yaml import load, dump, CLoader, CDumper
+from yaml import load, CLoader, CDumper
 from yaml.constructor import Constructor
+from pyaml import dump
 
 
 # Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
@@ -41,9 +42,9 @@ def save_data(train_data, test_data, name):
         os.makedirs(dirname+'/'+name)
 
     with open(dirname+"/{}/{}_train.yaml".format(name, name), 'w') as f:
-        f.write(dump(train_data, Dumper=CDumper))
+        f.write(dump(train_data)) #, Dumper=CDumper))
     with open(dirname+"/{}/{}_test.yaml".format(name, name), 'w') as f:
-        f.write(dump(test_data, Dumper=CDumper))
+        f.write(dump(test_data)) #, Dumper=CDumper))
     with open(dirname+"/{}/__init__.py".format(name, name), 'w') as f:
         l = 'from project.data.preprocessed import load_data\n\n{}_data = load_data("{}")'.format(
             name, name)
