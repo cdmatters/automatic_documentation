@@ -56,14 +56,14 @@ class HashtableBaseline(object):
             translation = random.choice(descriptions)
 
             translations.append(SingleTranslation(
-                hash_string, self.tok(d["arg_desc"]), self.tok(translation)))
+                hash_string, d["arg_desc_tokens"], translation))
         return translations
 
     def train(self, train_data):
         for i, d in enumerate(train_data):
             hash_string = tokenize.get_hash_string(d)
             l = len(hash_string)
-            self.descriptions.append(d["arg_desc"])
+            self.descriptions.append(d["arg_desc_tokens"])
 
             for j in range(l):
                 ngrams = self.get_n_grams(j + 1, hash_string)
