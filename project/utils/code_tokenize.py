@@ -1,7 +1,21 @@
 import ast
-from collections import Counter
+import showast
+from collections import defaultdict, namedtuple, Counter
 
-import re
+CodePath = namedtuple("CodePath", ["from_var", "path", "to_var"])
+CodePath.__repr__ = lambda s: str(s[0]) + " | " + " ".join(["{}".format(p[0]) for p in s[1]]) + " | " + str(s[2])
+
+def populate_codepath(data):
+    new_data = []
+    for i, d in enumerate(data):
+        try:
+            tree = get_ast(d)
+            paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
+            d["codepaths"] = extract_paths_to_leaves(d['arg_name'], paths_from_root)
+            new_data.append(d)
+        except SyntaxError:
+            print("ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+    return new_data
 
 def get_pure_src(d):
     src = clear_leading_indent(d['src'])
@@ -63,6 +77,95 @@ def clear_leading_indent(d):
     
     return "\n".join(split)
 
+
+def _strip_docstring(body):
+    first = body[0]
+    if isinstance(first, ast.Expr) and isinstance(first.value, ast.Str):
+        return body[1:]
+    return body
+
+def node_gen(node):
+    attribute_gen = (getattr(node, attr) for attr in node._fields)
+    return zip(node._fields, attribute_gen)
+
+def node_type(field):
+    return field.__class__.__name__, id(field)
+
+def extract_paths_to_leaves(variable, pmap):
+    core_paths = pmap[variable]
+
+    path_tuple_list = [] # [(varX, [path,(up), fromX, (up), toY,], varY)] 
+    for other_var, other_var_paths in pmap.items():
+        if other_var == variable:
+            continue
+        for path in other_var_paths:
+            for cpath in core_paths:
+                if ignore_path(cpath) or ignore_path(path): 
+                    continue
+                connecting_path = extract_connecting_path(cpath, path)
+                path_tuple_list.append(CodePath(variable, connecting_path, other_var))
+    return path_tuple_list
+            
+def get_root_index(pathA, pathB):
+    for i in range(len(pathA)):
+        if i == len(pathB):
+            return 0
+            break
+        elif pathA[i] != pathB[i]:
+            return i - 1
+    return i  
+
+def extract_connecting_path(pathA, pathB):
+    root = get_root_index(pathA, pathB)
+
+    UP = ("<-", None)
+    DOWN = ("->", None)
+    final = []
+    for a in reversed(pathA[root:]):
+        final.append(a)
+        final.append(UP)
+    final.pop()
+    for b in pathB[root+1:]:
+        final.append(DOWN)
+        final.append(b)
+    return final
+    
+def ignore_path(path):
+    filtered_out = [
+        tuple(["ClassDef","FunctionDef", "arguments", "arg"]), 
+        tuple(["FunctionDef", "arguments", "arg"]), 
+        tuple(["FunctionDef"])
+    ]
+    
+    return tuple(p[0] for p in path) in filtered_out
+
+def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
+    '''Take an AST. Return a map from variable name to list of paths to root node (ie list of lists)'''
+    nodes_with_docstring = isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.Module))
+    for name, field in node_gen(node):
+        if isinstance(field, list):
+            if nodes_with_docstring and name == 'body':
+                field = _strip_docstring(field)
+            for f in field:
+                new_path = path + [(node_type(f))]
+                if isinstance(f, ast.AST):
+                    extract_paths_from_root(f, new_path, pmap, accept_nonvar_terminals)
+                else:
+                    pmap[f].append(path)
+        elif isinstance(field, ast.AST):
+            nt = node_type(field)
+            if field._fields:
+                new_path = path + [nt]
+                extract_paths_from_root(field, new_path, pmap, accept_nonvar_terminals)
+            else:
+                # HERE WE ACCEPT NON VARIABLE TERMINALS
+                if accept_nonvar_terminals:
+                    pmap[nt[0]].append(path)
+        elif isinstance(field, str):
+            pmap[field].append(path)
+        elif field is not None:
+            pmap[field].append(path)
+    return pmap 
 
 
 if __name__== "__main__":
