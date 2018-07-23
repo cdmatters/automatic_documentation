@@ -1,9 +1,11 @@
 import ast
-import showast
+# import showast
 from collections import defaultdict, namedtuple, Counter
 
 CodePath = namedtuple("CodePath", ["from_var", "path", "to_var"])
 CodePath.__repr__ = lambda s: str(s[0]) + " | " + " ".join(["{}".format(p[0]) for p in s[1]]) + " | " + str(s[2])
+
+MAX_CODEPATH_LEN = 17
 
 def populate_codepath(data):
     new_data = []
@@ -91,6 +93,23 @@ def node_gen(node):
 def node_type(field):
     return field.__class__.__name__, id(field)
 
+def ignore_connecting_path(connecting_path):
+    return len(connecting_path) > MAX_CODEPATH_LEN
+
+def ignore_path(cpath, path):
+    filtered_out = [
+        tuple(["ClassDef","FunctionDef", "arguments", "arg"]), 
+        tuple(["FunctionDef", "arguments", "arg"]), 
+        tuple(["FunctionDef"])
+    ]
+    
+    banned_ending = ['keywords']
+    path_tuple = tuple(p[0] for p in path)
+    cpath_tuple = tuple(p[0] for p in cpath)
+    return path_tuple in filtered_out \
+            or cpath_tuple in filtered_out \
+            or cpath_tuple[-1] in banned_ending
+
 def extract_paths_to_leaves(variable, pmap):
     core_paths = pmap[variable]
 
@@ -100,9 +119,11 @@ def extract_paths_to_leaves(variable, pmap):
             continue
         for path in other_var_paths:
             for cpath in core_paths:
-                if ignore_path(cpath) or ignore_path(path): 
+                if ignore_path(cpath, path): 
                     continue
                 connecting_path = extract_connecting_path(cpath, path)
+                if ignore_connecting_path(connecting_path):
+                    continue
                 path_tuple_list.append(CodePath(variable, connecting_path, other_var))
     return path_tuple_list
             
@@ -130,14 +151,7 @@ def extract_connecting_path(pathA, pathB):
         final.append(b)
     return final
     
-def ignore_path(path):
-    filtered_out = [
-        tuple(["ClassDef","FunctionDef", "arguments", "arg"]), 
-        tuple(["FunctionDef", "arguments", "arg"]), 
-        tuple(["FunctionDef"])
-    ]
-    
-    return tuple(p[0] for p in path) in filtered_out
+
 
 def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
     '''Take an AST. Return a map from variable name to list of paths to root node (ie list of lists)'''
