@@ -9,15 +9,34 @@ MAX_CODEPATH_LEN = 17
 
 def populate_codepath(data):
     new_data = []
+    all_paths = []
+    all_target_vars = []
     for i, d in enumerate(data):
         try:
             tree = get_ast(d)
             paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
-            d["codepaths"] = extract_paths_to_leaves(d['arg_name'], paths_from_root)
+            codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
+            d["codepaths"] = codepaths
+            
+            path_strings = []
+            target_var_names = []
+            for cp in codepaths:
+                path_strings.append(" ".join([p[0] for p in cp.path]))
+                target_var_names.append(cp.to_var)
+
+            
+            d["path_strings"] = path_strings
+            d["target_var_string"] = target_var_names
+
+            all_paths.extend(path_strings)
+            all_target_vars.extend(target_var_names)
             new_data.append(d)
         except SyntaxError:
+            # d["codepaths"] = []
             print("ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
-    return new_data
+    
+
+    return new_data, Counter(all_paths).most_common(), Counter(all_target_vars).most_common()
 
 def get_pure_src(d):
     src = clear_leading_indent(d['src'])

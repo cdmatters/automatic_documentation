@@ -250,6 +250,19 @@ def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx)
         fill_name_funcname_other_args_tok(d, char2idx)
     return data
 
+def tokenize_path_from_var(data, word2idx, vocabfile=None, vocab_size=20000):
+    if vocabfile is not None:
+       continue
+    
+    new_data, most_common_path, most_common_target = populate_codepath(data)
+    path_vocab = {v:i+1 for i, v in enumerate(most_common_path[:vocab_size])}
+    tgt_vocab = {v:i+1 for i, v in enumerate(most_common_target[:vocab_size])}
+
+    # 1. FILL IN TOKENS WITH NUMBERS
+    # 2. ADD THE EXTRA UNK TOKENS
+    # 3. CREATE THE ORIGINAL WEIGHTS  
+
+    return new_data 
 
 
 def tokenize_src_all_basic_tokens(data, word2idx):
@@ -308,6 +321,8 @@ def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
 def choose_code_tokenizer(tokenizer):
     if tokenizer == 'full':
         tokenize = tokenize_src_all_basic_tokens
+    if tokenizer == 'code2vec'
+        tokenize = tokenize_path_from_var
     return tokenize
 
 def choose_tokenizer(tokenizer):
