@@ -1,42 +1,112 @@
 import ast
-# import showast
+from multiprocessing import Process, JoinableQueue, cpu_count
 from collections import defaultdict, namedtuple, Counter
+import queue
+import copy
+from time import sleep
+# import showast
+
 
 CodePath = namedtuple("CodePath", ["from_var", "path", "to_var"])
 CodePath.__repr__ = lambda s: str(s[0]) + " | " + " ".join(["{}".format(p[0]) for p in s[1]]) + " | " + str(s[2])
 
 MAX_CODEPATH_LEN = 17
 
+
+
 def populate_codepath(data):
-    new_data = []
-    all_paths = []
-    all_target_vars = []
-    for i, d in enumerate(data):
-        try:
-            tree = get_ast(d)
-            paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
-            codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
-            d["codepaths"] = codepaths
-            
-            path_strings = []
-            target_var_names = []
-            for cp in codepaths:
-                path_strings.append(" ".join([p[0] for p in cp.path]))
-                target_var_names.append(cp.to_var)
+    error_queue = JoinableQueue()
+    all_paths = JoinableQueue()
+    all_target_vars = JoinableQueue()
 
-            
-            d["path_strings"] = path_strings
-            d["target_var_string"] = target_var_names
+    data_queue = JoinableQueue()
+    [data_queue.put_nowait((i,d)) for i, d in enumerate(data)]
+    new_data_queue = JoinableQueue()
 
-            all_paths.extend(path_strings)
-            all_target_vars.extend(target_var_names)
-            new_data.append(d)
-        except SyntaxError:
-            # d["codepaths"] = []
-            print("ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+    
+    num_worker_threads = min(10, cpu_count() - 2)
+    jobs = []
+    print("Starting {} Processes".format(num_worker_threads))
+    def populate_codepath_point(data_queue, error_queue, all_paths,
+                                all_target_vars, new_data_queue):
+        while True:
+            try:
+                i,d = data_queue.get()
+                tree = get_ast(d)
+                paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
+                codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
+                d["codepaths"] = codepaths
+                
+                path_strings = []
+                target_var_names = []
+                for cp in codepaths:
+                    ps = " ".join([p[0] for p in cp.path])
+                    path_strings.append(ps)
+                    all_paths.put(ps)
+    
+                    tv = cp.to_var
+                    target_var_names.append(tv)
+                    all_target_vars.put(tv)
+                    
+                
+                d["path_strings"] = path_strings
+                d["target_var_string"] = target_var_names
+                new_data_queue.put(d)
+                data_queue.task_done()
+            except SyntaxError:
+                error_queue.put(i)
+                # d["codepaths"] = []
+                print("ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+                data_queue.task_done()
+            except queue.Empty:
+                print("YEP")
+                return
+        return
+
+    def pop_queue_closure(our_list):
+        return_list = our_list
+        def pop_queue(q):
+            while True:
+                try:
+                    item = q.get_nowait()
+                
+                    return_list.append(item)
+                    q.task_done()
+                except queue.Empty:
+                    break
+        return pop_queue
+
+    def cant_stop(queue_lists):
+        error_plus_new_data_is_old_data = len(queue_lists[0]) + len(queue_lists[3]) != len(data)
+        target_var_names_is_paths = len(queue_lists[1]) != len(queue_lists[2])
+        return error_plus_new_data_is_old_data or target_var_names_is_paths
+
+    for _ in range(num_worker_threads - 1):
+        p = Process(target=populate_codepath_point, 
+                                    args=(data_queue, error_queue, all_paths, all_target_vars, new_data_queue))
+        p.start()
+        jobs.append(p)
+    
+    queue_lists = []
+    func_lists = []
+    for q in [error_queue, all_paths, all_target_vars, new_data_queue]:
+        queue_lists.append([])
+        func = pop_queue_closure(queue_lists[-1])
+        func_lists.append((func, q))
     
 
-    return new_data, Counter(all_paths).most_common(), Counter(all_target_vars).most_common()
+    while cant_stop(queue_lists):
+        print(len(queue_lists[0]), len(queue_lists[1]), 
+              len(queue_lists[2]), len(queue_lists[3]), len(data), end="\r")
+        [func(q) for func, q in func_lists]
+
+    print("Closed Processes")
+    print(len(queue_lists[0]), len(queue_lists[1]), 
+              len(queue_lists[2]), len(queue_lists[3]), len(data))
+    [j.terminate() for j in jobs]
+
+    _, all_paths_list, all_target_vars, all_data = queue_lists
+    return all_data, Counter(all_paths_list).most_common(), Counter(all_target_vars).most_common()
 
 def get_pure_src(d):
     src = clear_leading_indent(d['src'])
@@ -203,30 +273,40 @@ def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
 
 if __name__== "__main__":
     from project.data.preprocessed.split import split_data as DATA
-    D = DATA.train + DATA.valid + DATA.test
-
-
-    test = D[69]['src']
-    name = D[69]
     
-    src = clear_leading_indent(test)
-    x = ast.parse(src)
-    docstring = ast.get_docstring(x.body[0], clean=True)
-    d_ = clear_docstring(src, docstring)
-    print(d_, docstring, src)
-    get_ast(name)
+    # populate_codepath(DATA.train)
+    # populate_codepath(DATA.valid)
+    x = DATA.test
+
+    x = DATA.train + DATA.valid + DATA.test
+    x,_,_ = populate_codepath(x)
+    # printx(x)
+    print(x[0]['codepaths'])
+
+    # from project.data.preprocessed.split import split_data as DATA
 
 
-    counter = []
-    for i, d in enumerate(D):
-        try:
-            # get_pure_src(d)
-            get_ast(d)
-        except Exception as e:
-           counter.append(type(e).__name__)
-           print(e.args)
+    # test = D[69]['src']
+    # name = D[69]
+    
+    # src = clear_leading_indent(test)
+    # x = ast.parse(src)
+    # docstring = ast.get_docstring(x.body[0], clean=True)
+    # d_ = clear_docstring(src, docstring)
+    # print(d_, docstring, src)
+    # get_ast(name)
 
-           print(len(counter),i+1, d['arg_name'], type(e).__name__)
 
-    print(Counter(counter))
+    # counter = []
+    # for i, d in enumerate(D):
+    #     try:
+    #         # get_pure_src(d)
+    #         get_ast(d)
+    #     except Exception as e:
+    #        counter.append(type(e).__name__)
+    #        print(e.args)
+
+    #        print(len(counter),i+1, d['arg_name'], type(e).__name__)
+
+    # print(Counter(counter))
 
