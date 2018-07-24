@@ -79,10 +79,10 @@ def assimilate_data():
                     "args": args
                 }
 
-        with open(PREPROCESSDATADIR+"/index.txt", "w") as f:
+        with open(PREPROCESSDATADIR+"/index.txt", "w", encoding='utf-8') as f:
             all_files["TOTAL__"] = {"funcs": tot_f, "args": tot_args}
             f.write(pyaml.dump(all_files))
-        with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "w") as f:
+        with open(PREPROCESSDATADIR+"/all_{}.yaml".format(t), "w", encoding='utf-8') as f:
             f.write(pyaml.dump(all_data))#, Dumper=CDumper))
 
     for t in types:
@@ -116,7 +116,7 @@ def map_yaml_to_arg_list(yaml_object):
 
 
 def prep_main_set(test_percentage):
-    with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
+    with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
     main_data = map_yaml_to_arg_list(data)
@@ -130,7 +130,7 @@ def prep_main_set(test_percentage):
     preprocessed.save_data(train_data, test_data, 'unsplit')
 
 def prep_no_duplicates(test_percentage):
-    with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
+    with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
     main_data = map_yaml_to_arg_list(data)
@@ -156,7 +156,7 @@ def prep_no_duplicates(test_percentage):
 
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
-    with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
+    with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
     overfit_set = {}
@@ -177,7 +177,7 @@ def prep_overfit_set(test_percentage):
 
 def prep_repo_split_set(test_percentage):
     '''Prepare a data set with training and test data from different repositories'''
-    with open(PREPROCESSDATADIR + "/index.txt", "r") as f:
+    with open(PREPROCESSDATADIR + "/index.txt", "r", encoding='utf-8') as f:
         index_data = yaml.load(f, Loader=CLoader)
 
     total = index_data.pop("TOTAL__")
@@ -197,7 +197,7 @@ def prep_repo_split_set(test_percentage):
         if count > test_set_size:
             break
 
-    with open(PREPROCESSDATADIR+"/all_full.yaml", "r") as f:
+    with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
     test_set = {}

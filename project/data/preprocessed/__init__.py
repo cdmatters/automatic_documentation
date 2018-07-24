@@ -24,9 +24,9 @@ def load_data(prefix, validation=0.3):
     test_file = '{}/{}/{}_test.yaml'.format(dirname, prefix, prefix)
 
     if os.path.isfile(train_file) and os.path.isfile(test_file):
-        with open(train_file, 'r') as f:
+        with open(train_file, 'r', encoding='utf-8') as f:
             train = load(f, Loader=CLoader)
-        with open(test_file, 'r') as f:
+        with open(test_file, 'r', encoding='utf-8') as f:
             test_total = load(f, Loader=CLoader)
             val_size = int(len(test_total) * validation)
             valid = test_total[:val_size]
@@ -41,11 +41,11 @@ def save_data(train_data, test_data, name):
     if not os.path.exists(dirname+'/'+name):
         os.makedirs(dirname+'/'+name)
 
-    with open(dirname+"/{}/{}_train.yaml".format(name, name), 'w') as f:
+    with open(dirname+"/{}/{}_train.yaml".format(name, name), 'w', encoding='utf-8') as f:
         f.write(dump(train_data)) #, Dumper=CDumper))
-    with open(dirname+"/{}/{}_test.yaml".format(name, name), 'w') as f:
+    with open(dirname+"/{}/{}_test.yaml".format(name, name), 'w', encoding='utf-8') as f:
         f.write(dump(test_data)) #, Dumper=CDumper))
-    with open(dirname+"/{}/__init__.py".format(name, name), 'w') as f:
+    with open(dirname+"/{}/__init__.py".format(name, name), 'w', encoding='utf-8') as f:
         l = 'from project.data.preprocessed import load_data\n\n{}_data = load_data("{}")'.format(
             name, name)
         f.write(l)
