@@ -10,6 +10,7 @@ from yaml.constructor import Constructor
 
 from project.data import preprocessed, data
 from project.utils.tokenize import nltk_tok
+from project.utils.code_tokenize import return_populated_codepath
 random.seed(100)
 
 # Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)
@@ -21,6 +22,64 @@ Constructor.add_constructor(u'tag:yaml.org,2002:bool', add_bool)
 
 RAWDATADIR = os.path.dirname(os.path.abspath(data.__file__))
 PREPROCESSDATADIR = os.path.dirname(os.path.abspath(preprocessed.__file__))
+
+def to_quickload(data):
+    new_data = []
+    for d in data:
+        new_data.append({
+            "arg_name": d["arg_name"],
+            "arg_desc": d["arg_desc"],
+            "path_ids": " ".join(str(n) for n in d["path_idx"]),
+            "target_var_ids": " ".join(str(n) for n in d["target_var_ids"]),
+            "name": d["name"],
+            "args": d["args"],
+            "pkg": d["pkg"]
+        })
+    return new_data
+
+
+def gen_code_vocab_files(data, name, subname):
+    all_paths = []
+    all_target_vars = []
+    for d in data:
+        all_paths.extend(d["path_strings"])
+        all_target_vars.extend(d["target_var_string"])
+    count_paths = Counter(all_paths).most_common()
+    count_vars = Counter(all_target_vars).most_common()
+    
+    preprocessed.save_vocab(count_paths, name, subname+'_paths')
+    preprocessed.save_vocab(count_vars, name, subname+'_tvs')
+    
+def tok_code_vocab_files(data, name, subname):
+    voc2idx_path, voc2count_path = preprocessed.load_vocab(name, subname+'_paths')
+    voc2idx_tv, voc2count_tv = preprocessed.load_vocab(name, subname+'_tvs')
+
+    for d in data:
+        d['path_idx'] = [voc2idx_path[p] if p in voc2idx_path else 0 for p in d["path_strings"] ]
+        d['target_var_ids'] = [voc2idx_tv[p] if p in voc2idx_tv else 0 for p in d["target_var_string"]]
+    return data
+
+def save_quickload_version(data, name, test_percentage):
+    do_split = (len(data) == 1)
+
+    if do_split:
+        data = return_populated_codepath(data[0])
+        n = len(data)
+        test = data[:int(n * test_percentage)]
+        train = data[int(n * test_percentage):]
+    else:
+        assert len(data) == 2
+        train = return_populated_codepath(data[0])
+        test = return_populated_codepath(data[1])
+
+    gen_code_vocab_files(train, name, "quickload")
+    train = to_quickload(tok_code_vocab_files(train, name, "quickload"))
+    test = to_quickload(tok_code_vocab_files(test, name, "quickload"))
+
+    preprocessed.save_data(train, test, name, "quickload")
+
+
+
 
 
 def _ad_hoc_clean(filename, line):
@@ -116,6 +175,7 @@ def map_yaml_to_arg_list(yaml_object):
 
 
 def prep_main_set(test_percentage):
+    print("starting: prep_main_set")
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
@@ -128,8 +188,11 @@ def prep_main_set(test_percentage):
     train_data = main_data[int(n * test_percentage):]
 
     preprocessed.save_data(train_data, test_data, 'unsplit')
+    save_quickload_version([main_data], 'unsplit', test_percentage)
+ 
 
 def prep_no_duplicates(test_percentage):
+    print("starting: prep_no_duplicates")
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
@@ -151,11 +214,13 @@ def prep_no_duplicates(test_percentage):
         test_data = filtered_data[:int(n * test_percentage)]
         train_data = filtered_data[int(n * test_percentage):]
     
+
         preprocessed.save_data(train_data, test_data, 'no_dups_{}'.format(dups_str))
-
-
+        save_quickload_version([filtered_data], 'no_dups_{}'.format(dups_str), test_percentage)
+        
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
+    print("starting: prep_overfit_set")
     with open(PREPROCESSDATADIR+"/all_full.yaml", "r", encoding='utf-8') as f:
         data = yaml.load(f, Loader=CLoader)
 
@@ -173,10 +238,11 @@ def prep_overfit_set(test_percentage):
     train = overfit_data[int(n * test_percentage):]
 
     preprocessed.save_data(train, test, 'overfit')
-
-
+    save_quickload_version([overfit_data], 'overfit', test_percentage)
+    
 def prep_repo_split_set(test_percentage):
     '''Prepare a data set with training and test data from different repositories'''
+    print("starting: prep_repo_split_set")
     with open(PREPROCESSDATADIR + "/index.txt", "r", encoding='utf-8') as f:
         index_data = yaml.load(f, Loader=CLoader)
 
@@ -220,6 +286,9 @@ def prep_repo_split_set(test_percentage):
         len(test_data)/(len(test_data) + len(train_data))))
 
     preprocessed.save_data(train_data, test_data, 'split')
+    save_quickload_version([train_data, test_data], 'split', test_percentage)
+    
+
 
 
 def _build_argparser():
@@ -239,6 +308,8 @@ def _build_argparser():
                         default=False, help='assimilate and prep both main and overfit datasets')
 
     return parser
+
+
 
 
 if __name__ == "__main__":

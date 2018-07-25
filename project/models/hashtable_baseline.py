@@ -117,7 +117,7 @@ def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the non-neural hashtable baseline')
     parser.add_argument('--no-times', '-N', dest='n_times', action='store',
-                       type=int, default=1,
+                       type=int, default=10,
                        help='no of times (print std dev & mean')
     return parser
 

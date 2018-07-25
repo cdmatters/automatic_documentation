@@ -1,7 +1,7 @@
 from collections import namedtuple, Counter
 import os
 
-import nltk
+from nltk import word_tokenize
 import numpy as np
 from tqdm import tqdm
 
@@ -134,7 +134,7 @@ def get_weights_word2idx(desc_embed, vocab_size=100000, train_data=None):
     return (weights, word2idx)
 
 def nltk_tok(desc):
-    return nltk.word_tokenize(desc.replace('\\n', " ").lower())
+    return word_tokenize(desc.replace('\\n', " ").lower())
 
 
 def fill_descriptions_tok(d, word2idx):
@@ -298,25 +298,25 @@ def extract_char_and_desc_code_idx_tensors(data, char_seq, desc_seq, code_seq):
 def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
     if use_full_dataset:
         if use_split_dataset:
-            from project.data.preprocessed.split import split_data as data
+            from project.data.preprocessed.split import split_quickload_data as data
         else:
             if no_dups == 0:
-                from project.data.preprocessed.unsplit import unsplit_data as data
+                from project.data.preprocessed.unsplit import unsplit_quickload_data as data
             elif no_dups == 1:
-                from project.data.preprocessed.no_dups_1 import no_dups_1_data as data
+                from project.data.preprocessed.no_dups_1 import no_dups_1_quickload_data as data
             elif no_dups == 2:
-                from project.data.preprocessed.no_dups_2 import no_dups_2_data as data
+                from project.data.preprocessed.no_dups_2 import no_dups_2_quickload_data as data
             elif no_dups == 3:
-                from project.data.preprocessed.no_dups_3 import no_dups_3_data as data
+                from project.data.preprocessed.no_dups_3 import no_dups_3_quickload_data as data
             elif no_dups == 4:
-                from project.data.preprocessed.no_dups_4 import no_dups_4_data as data
+                from project.data.preprocessed.no_dups_4 import no_dups_4_quickload_data as data
             elif no_dups == 5:
-                from project.data.preprocessed.no_dups_5 import no_dups_5_data as data
+                from project.data.preprocessed.no_dups_5 import no_dups_5_quickload_data as data
             elif no_dups == 10:
-                from project.data.preprocessed.no_dups_X import no_dups_X_data as data
+                from project.data.preprocessed.no_dups_X import no_dups_X_quickload_data as data
     else:
-        from project.data.preprocessed.overfit import overfit_data as data
-    return data
+        from project.data.preprocessed.overfit import overfit_quickload_data as data
+    return data()
 
 def choose_code_tokenizer(tokenizer):
     if tokenizer == 'full':

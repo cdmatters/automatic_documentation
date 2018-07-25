@@ -12,101 +12,87 @@ CodePath.__repr__ = lambda s: str(s[0]) + " | " + " ".join(["{}".format(p[0]) fo
 
 MAX_CODEPATH_LEN = 17
 
+def populate_codepath_point_worker(data_queue, error_queue, new_data_queue):
+    while True:
+        try:
+            i,d = data_queue.get()
+            tree = get_ast(d)
+            paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
+            codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
+            # d["codepaths"] = codepaths
+            
+            path_strings = []
+            target_var_names = []
+            for cp in codepaths:
+                ps = " ".join([p[0] for p in cp.path])
+                path_strings.append(ps)
 
+                tv = cp.to_var
+                target_var_names.append(tv)
+                
+            d["path_strings"] = path_strings
+            d["target_var_string"] = target_var_names
+            if codepaths:
+                new_data_queue.put(d)
+            else:
+                error_queue.put(i)
+                # print("NO PATHS in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+            data_queue.task_done()
+        except SyntaxError:
+            error_queue.put(i)
+            print("SYNTAX ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+            data_queue.task_done()
+        except queue.Empty:
+            return
+    return
 
-def populate_codepath(data):
+def pop_queue_closure(our_list):
+    return_list = our_list
+    def pop_queue(q):
+        while True:
+            try:
+                item = q.get_nowait()
+            
+                return_list.append(item)
+                q.task_done()
+            except queue.Empty:
+                break
+    return pop_queue
+
+def return_populated_codepath(data):
     error_queue = JoinableQueue()
-    all_paths = JoinableQueue()
-    all_target_vars = JoinableQueue()
+    error_list = []
+    new_data_queue = JoinableQueue()
+    new_data_list = []
 
     data_queue = JoinableQueue()
     [data_queue.put_nowait((i,d)) for i, d in enumerate(data)]
-    new_data_queue = JoinableQueue()
 
     
-    num_worker_threads = min(10, cpu_count() - 2)
+    num_worker_threads = min(20, cpu_count() - 2)
     jobs = []
-    print("Starting {} Processes".format(num_worker_threads))
-    def populate_codepath_point(data_queue, error_queue, all_paths,
-                                all_target_vars, new_data_queue):
-        while True:
-            try:
-                i,d = data_queue.get()
-                tree = get_ast(d)
-                paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
-                codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
-                d["codepaths"] = codepaths
-                
-                path_strings = []
-                target_var_names = []
-                for cp in codepaths:
-                    ps = " ".join([p[0] for p in cp.path])
-                    path_strings.append(ps)
-                    all_paths.put(ps)
     
-                    tv = cp.to_var
-                    target_var_names.append(tv)
-                    all_target_vars.put(tv)
-                    
-                
-                d["path_strings"] = path_strings
-                d["target_var_string"] = target_var_names
-                new_data_queue.put(d)
-                data_queue.task_done()
-            except SyntaxError:
-                error_queue.put(i)
-                # d["codepaths"] = []
-                print("ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
-                data_queue.task_done()
-            except queue.Empty:
-                print("YEP")
-                return
-        return
-
-    def pop_queue_closure(our_list):
-        return_list = our_list
-        def pop_queue(q):
-            while True:
-                try:
-                    item = q.get_nowait()
-                
-                    return_list.append(item)
-                    q.task_done()
-                except queue.Empty:
-                    break
-        return pop_queue
-
-    def cant_stop(queue_lists):
-        error_plus_new_data_is_old_data = len(queue_lists[0]) + len(queue_lists[3]) != len(data)
-        target_var_names_is_paths = len(queue_lists[1]) != len(queue_lists[2])
-        return error_plus_new_data_is_old_data or target_var_names_is_paths
-
+    print("Starting {} Processes".format(num_worker_threads))
     for _ in range(num_worker_threads - 1):
-        p = Process(target=populate_codepath_point, 
-                                    args=(data_queue, error_queue, all_paths, all_target_vars, new_data_queue))
+        p = Process(target=populate_codepath_point_worker, 
+                                    args=(data_queue, error_queue, new_data_queue))
         p.start()
         jobs.append(p)
     
-    queue_lists = []
     func_lists = []
-    for q in [error_queue, all_paths, all_target_vars, new_data_queue]:
-        queue_lists.append([])
-        func = pop_queue_closure(queue_lists[-1])
+    for q, l in [(error_queue, error_list), (new_data_queue, new_data_list)]:
+        func = pop_queue_closure(l)
         func_lists.append((func, q))
     
-
-    while cant_stop(queue_lists):
-        print(len(queue_lists[0]), len(queue_lists[1]), 
-              len(queue_lists[2]), len(queue_lists[3]), len(data), end="\r")
+    while len(error_list) + len(new_data_list) != len(data):
+        print(len(error_list), len(new_data_list), len(data), end="\r")
         [func(q) for func, q in func_lists]
-
-    print("Closed Processes")
-    print(len(queue_lists[0]), len(queue_lists[1]), 
-              len(queue_lists[2]), len(queue_lists[3]), len(data))
+    
+    print(len(error_list), len(new_data_list), len(data), end="\r")
     [j.terminate() for j in jobs]
+    print("Closed Processes")
 
-    _, all_paths_list, all_target_vars, all_data = queue_lists
-    return all_data, Counter(all_paths_list).most_common(), Counter(all_target_vars).most_common()
+    return new_data_list 
 
 def get_pure_src(d):
     src = clear_leading_indent(d['src'])
@@ -117,7 +103,6 @@ def get_pure_src(d):
     return src
 
 def get_ast(d):
-    # src = get_pure_src(d)
     x = ast.parse(clear_leading_indent(d['src']))
     return x
 
@@ -192,7 +177,7 @@ def ignore_path(cpath, path):
         tuple(["FunctionDef"])
     ]
     
-    banned_ending = ['keywords']
+    banned_ending = ['keywords', 'keyword']
     path_tuple = tuple(p[0] for p in path)
     cpath_tuple = tuple(p[0] for p in cpath)
     return path_tuple in filtered_out \
@@ -274,12 +259,12 @@ def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
 if __name__== "__main__":
     from project.data.preprocessed.split import split_data as DATA
     
-    # populate_codepath(DATA.train)
-    # populate_codepath(DATA.valid)
+    # return_populated_codepath(DATA.train)
+    # return_populated_codepath(DATA.valid)
     x = DATA.test
 
     x = DATA.train + DATA.valid + DATA.test
-    x,_,_ = populate_codepath(x)
+    x = return_populated_codepath(x)
     # printx(x)
     print(x[0]['codepaths'])
 
