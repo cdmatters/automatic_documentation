@@ -98,26 +98,17 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 second_encoder_outputs, second_state = self._build_bi_rnn_encoder(
                     second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
                 
-                c = tf.concat([first_state[0,:,:], second_state[0,:,:]], axis = 1)
-                h = tf.concat([first_state[1,:,:], second_state[1,:,:]], axis = 1)
-                state = tf.contrib.rnn.LSTMStateTuple(c, h)
-                # state = tf.concat([first_state, second_state], axis = 2)
-
-
-                # encoder_outputs = tf.concat([first_encoder_outputs, second_encoder_outputs], axis = 1)
             else:
                 first_encoder_outputs, first_state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
                 second_encoder_outputs, second_state = self._build_rnn_encoder(
                     second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
 
-                c = tf.concat([first_state.c, second_state.c], axis = 1)
-                h = tf.concat([first_state.h, second_state.h], axis = 1)
-                state = tf.contrib.rnn.LSTMStateTuple(c, h)
+            c = tf.concat([first_state.c, second_state.c], axis = 1)
+            h = tf.concat([first_state.h, second_state.h], axis = 1)
+            state = tf.contrib.rnn.LSTMStateTuple(c, h)
 
-                # state = tf.concat([first_state, second_state], axis = 2)
-                # encoder_outputs = tf.concat([first_encoder_outputs, second_encoder_outputs], axis = 1)
-                
+         
             
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size + self.second_rnn_size

@@ -175,18 +175,13 @@ class Code2VecEmbedder(BasicRNNModel):
             if self.bidirectional:
                 first_encoder_outputs, first_state = self._build_bi_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob, name="FirstRNN")
-
-                c = tf.concat([first_state[0,:,:], code2vec_embedding], axis = 1)
-                h = tf.concat([first_state[1,:,:], code2vec_embedding], axis = 1)
-                state = tf.contrib.rnn.LSTMStateTuple(c, h)
-
             else:
                 first_encoder_outputs, first_state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
 
-                c = tf.concat([first_state.c, code2vec_embedding], axis = 1)
-                h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
-                state = tf.contrib.rnn.LSTMStateTuple(c, h)
+            c = tf.concat([first_state.c, code2vec_embedding], axis = 1)
+            h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
+            state = tf.contrib.rnn.LSTMStateTuple(c, h)
 
                 
 

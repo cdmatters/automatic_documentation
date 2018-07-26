@@ -143,8 +143,9 @@ class BasicRNNModel(abc.ABC):
                                                   initial_state_bw=initial_state_bk,
                                                   time_major=False)
 
-
-            return tf.concat(outputs, 2), tf.concat(output_states, 2)
+            final_states = tf.concat(output_states, 2)
+            final_states = tf.contrib.rnn.LSTMStateTuple(final_states[0,:,:], final_states[1,:,:])
+            return tf.concat(outputs, 2), final_states
 
 
     @staticmethod

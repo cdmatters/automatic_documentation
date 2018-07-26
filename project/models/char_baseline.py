@@ -85,19 +85,21 @@ class CharSeqBaseline(BasicRNNModel):
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
 
             # 3. Build out Cell ith attention
+            decoder_size = self.rnn_size
             if self.bidirectional:
+                decoder_size = decoder_size * 2
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    self.rnn_size * 2, name="RNNencoder")
+                    decoder_size, name="RNNencoder")
             else:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    self.rnn_size, name="RNNencoder")
+                    decoder_size, name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
                 desc_vocab_size, use_bias=False)
 
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-                self.rnn_size, encoder_outputs,
+                decoder_size, encoder_outputs,
                 memory_sequence_length=input_data_seq_length)
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
@@ -108,7 +110,7 @@ class CharSeqBaseline(BasicRNNModel):
 
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism,
-                attention_layer_size=self.rnn_size)
+                attention_layer_size=decoder_size)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
@@ -154,11 +156,12 @@ class CharSeqBaseline(BasicRNNModel):
             for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
-                _,  _, train_id, train_summary = self._feed_fwd(
+                _,  loss, train_id, train_summary = self._feed_fwd(
                     session, minibatch, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
-
-                if epoch != e:
+                
+                
+                if epoch != e and False:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
                         session, data_tuple.train, max_points=5000)
@@ -216,10 +219,11 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
+    bidirectional = bidirectional > 0
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
         use_full_dataset, use_split_dataset, tokenizer, no_dups)
-    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout)
+    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional)
 
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
