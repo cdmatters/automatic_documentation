@@ -261,8 +261,8 @@ def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx)
 
 def tokenize_code2vec(data, word2idx, vocab_size=20000):
     for d in data:
-        d["path_idx"] = np.fromstring(d["path_ids"], dtype=int, sep=" ")
-        d["target_var_idx"] = np.fromstring(d["target_var_ids"], dtype=int, sep=" ")
+        d["path_idx"] = np.fromstring(d["path_idx"], dtype=int, sep=" ")
+        d["target_var_idx"] = np.fromstring(d["target_var_idx"], dtype=int, sep=" ")
     
         d["path_idx"][d["path_idx"] > vocab_size] = 0
         d["target_var_idx"][d["target_var_idx"] > vocab_size] = 0
@@ -390,10 +390,10 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     fields = ["arg_name_idx", "arg_desc_idx"]
     seq_lengths = [char_seq, desc_seq]
 
-    if code_tokenize == 'code2vec':
+    if code_tokenizer == 'code2vec':
         fields.extend(["path_idx", "target_var_idx"])
         seq_lengths.extend([1000, 1000])
-    elif code_tokenize == "full":
+    elif code_tokenizer == "full":
         fields.extend(["src_idx"])
         seq_lengths.extend([200])
     

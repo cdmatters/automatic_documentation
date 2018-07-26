@@ -48,7 +48,7 @@ def load_vocab(name, subname=None):
     with open(dirname+"/{}/{}.vocab".format(name, filename), 'r', encoding='utf-8') as f:
         vocab_list = load(f, Loader=CLoader)
 
-        voc2idx = {"<UNK>":0}
+        voc2idx = {None:0, "<UNK>":1}
         voc2count = {}
         for v,c in vocab_list:
             voc2idx[v] = len(voc2idx)

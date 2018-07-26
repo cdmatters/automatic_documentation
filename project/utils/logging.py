@@ -70,7 +70,7 @@ def setup_logger(log_path):
     logger = logging.getLogger('')
     logger.setLevel(logging.DEBUG)
 
-    fh = logging.FileHandler('{}/main.log'.format(log_path))
+    fh = logging.FileHandler('{}/main.log'.format(log_path, encoding='utf-8'))
     fh.setLevel(logging.DEBUG)
 
     ch = logging.StreamHandler()

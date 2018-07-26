@@ -10,7 +10,7 @@ from time import sleep
 CodePath = namedtuple("CodePath", ["from_var", "path", "to_var"])
 CodePath.__repr__ = lambda s: str(s[0]) + " | " + " ".join(["{}".format(p[0]) for p in s[1]]) + " | " + str(s[2])
 
-MAX_CODEPATH_LEN = 17
+MAX_CODEPATH_LEN = 20
 
 def populate_codepath_point_worker(data_queue, error_queue, new_data_queue):
     while True:
