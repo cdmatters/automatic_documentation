@@ -28,14 +28,14 @@ SingleTranslationWithCode.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nINF
 class Code2VecEmbedder(BasicRNNModel):
 
     def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
-                dropout=0.3, bidirectional=False, name="BasicModel"):
+                dropout=0.3, bidirectional=False, vec_size=128, name="BasicModel"):
         super().__init__(embed_tuple, name)
         # To Do; all these args from config, to make saving model easier.
 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.rnn_size = rnn_size
-        self.code2vec_final_size = 128
+        self.code2vec_final_size = vec_size
         self.dropout = dropout
         self.bidirectional = bidirectional
 
@@ -183,6 +183,9 @@ class Code2VecEmbedder(BasicRNNModel):
             h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
             state = tf.contrib.rnn.LSTMStateTuple(c, h)
 
+                
+
+
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size + self.code2vec_final_size
             if self.bidirectional:
@@ -202,6 +205,7 @@ class Code2VecEmbedder(BasicRNNModel):
                 decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
+            
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
@@ -338,9 +342,9 @@ class Code2VecEmbedder(BasicRNNModel):
                        self.train_id, self.merged_metrics]
                 _,  loss, train_id, train_summary = self._feed_fwd(
                     session, minibatch, ops, 'TRAIN')
-                print(loss)
                 filewriters["train_continuous"].add_summary(train_summary, i)
-
+                
+                print(loss)
                 if epoch != e and False:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
@@ -387,18 +391,19 @@ def _build_argparser():
     parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
                        type=int, default=1,
                        help='use bidirectional lstm')
-
+    parser.add_argument('--vec-size', '-vs', dest='vec_size', action='store',
+                       type=int, default=1,
+                       help='size of code2vec vector')
     return parser
 
 
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs,
                vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups, **kwargs):
+               use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups, vec_size, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
-    # bidirectional = False #DELETE
     bidirectional = bidirectional > 0
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
@@ -407,7 +412,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
 
 
 
-    nn = Code2VecEmbedder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional)
+    nn = Code2VecEmbedder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional, vec_size)
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 
