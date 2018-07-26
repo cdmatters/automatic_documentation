@@ -160,7 +160,7 @@ class CharSeqBaseline(BasicRNNModel):
                     session, minibatch, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
                 
-                if epoch != e and False:
+                if epoch != e:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
                         session, data_tuple.train, max_points=5000)
