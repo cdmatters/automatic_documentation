@@ -333,18 +333,13 @@ class Code2VecEmbedder(BasicRNNModel):
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
-            # for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
-            i, (e, minibatch) = next(enumerate(self._to_batch(data_tuple.train, epochs)))
-            while True:
-                # i+=1
-                e+=1
+            for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
                 _,  loss, train_id, train_summary = self._feed_fwd(
                     session, minibatch, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
                 
-                print(loss)
                 if epoch != e and False:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
