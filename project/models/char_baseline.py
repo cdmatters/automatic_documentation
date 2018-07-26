@@ -224,7 +224,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 
-    LOGGER.warning("Printing to {}".format(log_path))
+    LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
     LOGGER.multiline_info(summary)
 
     init = tf.group(tf.global_variables_initializer(),

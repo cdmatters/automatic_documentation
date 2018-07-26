@@ -76,19 +76,27 @@ def gen_train_vocab(train_data, embed_file, vocab_size):
     most_common = Counter(all_toks).most_common()
     
     vocab = []
-    with open(embed_file, 'r', encoding='utf-8') as f:
-        file_voc = [ line.split()[0] for line in f ]
-        for tok, count in most_common:
+    if os.path.isfile(embed_file + ".vocab"):
+        with open(embed_file + ".vocab", 'r', encoding='utf-8') as f:
+            file_voc = [line.strip() for line in f]
+        
+    else:
+        with open(embed_file, 'r', encoding='utf-8') as f:
+            file_voc = [ line.split()[0] for line in f ]
+        with open(embed_file + ".vocab", 'w', encoding='utf-8') as f:
+            f.write("\n".join(file_voc))
+    
+    for tok, count in most_common:
 
-            if tok in file_voc and count > 4:
-                vocab.append(tok)
-                file_voc.remove(tok)
+        if tok in file_voc and count > 4:
+            vocab.append(tok)
+            file_voc.remove(tok)
 
-            if len(vocab) > vocab_size:
-                break
+        if len(vocab) > vocab_size:
+            break
 
-        if len(vocab) < vocab_size:
-            vocab.extend(file_voc[:vocab_size - len(vocab)])
+    if len(vocab) < vocab_size:
+        vocab.extend(file_voc[:vocab_size - len(vocab)])
     return set(vocab)
 
 
@@ -111,11 +119,12 @@ def get_weights_word2idx(desc_embed, vocab_size=100000, train_data=None):
             values = line.split()
 
             word = values[0]
-            word_weights = np.array(values[1:]).astype(np.float32)
-
             if word in desired_vocab:
+                word_weights = np.array(values[1:]).astype(np.float32)
+                
                 word2idx[word] = i + 1
                 weights.append(word_weights)
+                
                 i += 1
 
             if i > vocab_size:
@@ -250,19 +259,15 @@ def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx)
         fill_name_funcname_other_args_tok(d, char2idx)
     return data
 
-def tokenize_path_from_var(data, word2idx, vocabfile=None, vocab_size=20000):
-    if vocabfile is not None:
-       pass
+def tokenize_code2vec(data, word2idx, vocab_size=20000):
+    for d in data:
+        d["path_idx"] = np.fromstring(d["path_ids"], dtype=int, sep=" ")
+        d["target_var_idx"] = np.fromstring(d["target_var_ids"], dtype=int, sep=" ")
     
-    new_data, most_common_path, most_common_target = populate_codepath(data)
-    path_vocab = {v:i+1 for i, v in enumerate(most_common_path[:vocab_size])}
-    tgt_vocab = {v:i+1 for i, v in enumerate(most_common_target[:vocab_size])}
+        d["path_idx"][d["path_idx"] > vocab_size] = 0
+        d["target_var_idx"][d["target_var_idx"] > vocab_size] = 0
 
-    # 1. FILL IN TOKENS WITH NUMBERS
-    # 2. ADD THE EXTRA UNK TOKENS
-    # 3. CREATE THE ORIGINAL WEIGHTS  
-
-    return new_data 
+    return data 
 
 
 def tokenize_src_all_basic_tokens(data, word2idx):
@@ -275,6 +280,13 @@ def tokenize_src_all_basic_tokens(data, word2idx):
     
     return data
 
+def extract_tensors(data, fields, seq_lengths):
+    tensors = [[] for _ in fields]
+    for d in data:
+        for t, f, s in zip(tensors, fields, seq_lengths):
+            pad = [d[f][i] if i < len(d[f]) else 0 for i in range(s)]
+            t.append(np.array(pad))
+    return tuple([np.stack(t) for t in tensors])
 
 def extract_char_and_desc_code_idx_tensors(data, char_seq, desc_seq, code_seq):
     chars = []
@@ -295,34 +307,46 @@ def extract_char_and_desc_code_idx_tensors(data, char_seq, desc_seq, code_seq):
     return np.stack(chars), np.stack(descs), np.stack(code)
 
 
-def get_data_tuple(use_full_dataset, use_split_dataset, no_dups):
+def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=False):
     if use_full_dataset:
         if use_split_dataset:
-            from project.data.preprocessed.split import split_quickload_data as data
+            from project.data.preprocessed.split import split_quickload_data as q_data
+            from project.data.preprocessed.split import split_data as data
         else:
             if no_dups == 0:
-                from project.data.preprocessed.unsplit import unsplit_quickload_data as data
+                from project.data.preprocessed.unsplit import unsplit_quickload_data as q_data
+                from project.data.preprocessed.unsplit import unsplit_data as data
             elif no_dups == 1:
-                from project.data.preprocessed.no_dups_1 import no_dups_1_quickload_data as data
+                from project.data.preprocessed.no_dups_1 import no_dups_1_quickload_data as q_data
+                from project.data.preprocessed.no_dups_1 import no_dups_1_data as data
             elif no_dups == 2:
-                from project.data.preprocessed.no_dups_2 import no_dups_2_quickload_data as data
+                from project.data.preprocessed.no_dups_2 import no_dups_2_quickload_data as q_data
+                from project.data.preprocessed.no_dups_2 import no_dups_2_data as data
             elif no_dups == 3:
-                from project.data.preprocessed.no_dups_3 import no_dups_3_quickload_data as data
+                from project.data.preprocessed.no_dups_3 import no_dups_3_quickload_data as q_data
+                from project.data.preprocessed.no_dups_3 import no_dups_3_data as data
             elif no_dups == 4:
-                from project.data.preprocessed.no_dups_4 import no_dups_4_quickload_data as data
+                from project.data.preprocessed.no_dups_4 import no_dups_4_quickload_data as q_data
+                from project.data.preprocessed.no_dups_4 import no_dups_4_data as data
             elif no_dups == 5:
-                from project.data.preprocessed.no_dups_5 import no_dups_5_quickload_data as data
+                from project.data.preprocessed.no_dups_5 import no_dups_5_quickload_data as q_data
+                from project.data.preprocessed.no_dups_5 import no_dups_5_data as data
             elif no_dups == 10:
-                from project.data.preprocessed.no_dups_X import no_dups_X_quickload_data as data
+                from project.data.preprocessed.no_dups_X import no_dups_X_quickload_data as q_data
+                from project.data.preprocessed.no_dups_X import no_dups_X_data as data
     else:
-        from project.data.preprocessed.overfit import overfit_quickload_data as data
-    return data()
+        from project.data.preprocessed.overfit import overfit_quickload_data as q_data
+        from project.data.preprocessed.overfit import overfit_data as data
+    if use_quickload:
+        return q_data()
+    else:
+        return data()
 
 def choose_code_tokenizer(tokenizer):
     if tokenizer == 'full':
         tokenize = tokenize_src_all_basic_tokens
     if tokenizer == 'code2vec':
-        tokenize = tokenize_path_from_var
+        tokenize = tokenize_code2vec
     return tokenize
 
 def choose_tokenizer(tokenizer):
@@ -337,8 +361,12 @@ def choose_tokenizer(tokenizer):
     return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset, tokenizer='var_only', no_dups=0, code_tokenizer="full"):
-    data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
+                                   use_full_dataset, use_split_dataset, tokenizer='var_only', 
+                                   no_dups=0, code_tokenizer="full"):
+    if code_tokenizer == "code2vec":
+        data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=True)
+    else:
+        data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=False)
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
@@ -358,13 +386,27 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     test_data = code_tokenize(data_tuple.test, word2idx)
     
     print("Extracting tensors train and test")
-    code_seq = 200
-    train_data = extract_char_and_desc_code_idx_tensors(
-        train_data, char_seq, desc_seq, code_seq)
-    valid_data = extract_char_and_desc_code_idx_tensors(
-        valid_data, char_seq, desc_seq, code_seq)
-    test_data = extract_char_and_desc_code_idx_tensors(
-        test_data, char_seq, desc_seq, code_seq)
+    
+    fields = ["arg_name_idx", "arg_desc_idx"]
+    seq_lengths = [char_seq, desc_seq]
+
+    if code_tokenize == 'code2vec':
+        fields.extend(["path_idx", "target_var_idx"])
+        seq_lengths.extend([1000, 1000])
+    elif code_tokenize == "full":
+        fields.extend(["src_idx"])
+        seq_lengths.extend([200])
+    
+    train_data = extract_tensors(train_data, fields, seq_lengths)
+    valid_data = extract_tensors(valid_data, fields, seq_lengths)
+    test_data = extract_tensors(test_data, fields, seq_lengths)
+
+    # train_data = extract_char_and_desc_code_idx_tensors(
+    #     train_data, char_seq, desc_seq, code_seq)
+    # valid_data = extract_char_and_desc_code_idx_tensors(
+    #     valid_data, char_seq, desc_seq, code_seq)
+    # test_data = extract_char_and_desc_code_idx_tensors(
+    #     test_data, char_seq, desc_seq, code_seq)
     # print(train_data.shape)
     return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, valid_data, test_data, "Tensors")
 

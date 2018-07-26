@@ -29,8 +29,8 @@ def to_quickload(data):
         new_data.append({
             "arg_name": d["arg_name"],
             "arg_desc": d["arg_desc"],
-            "path_ids": " ".join(str(n) for n in d["path_idx"]),
-            "target_var_ids": " ".join(str(n) for n in d["target_var_ids"]),
+            "path_idx": " ".join(str(n) for n in d["path_idx"]),
+            "target_var_idx": " ".join(str(n) for n in d["target_var_idx"]),
             "name": d["name"],
             "args": d["args"],
             "pkg": d["pkg"]
@@ -56,7 +56,7 @@ def tok_code_vocab_files(data, name, subname):
 
     for d in data:
         d['path_idx'] = [voc2idx_path[p] if p in voc2idx_path else 0 for p in d["path_strings"] ]
-        d['target_var_ids'] = [voc2idx_tv[p] if p in voc2idx_tv else 0 for p in d["target_var_string"]]
+        d['target_var_idx'] = [voc2idx_tv[p] if p in voc2idx_tv else 0 for p in d["target_var_string"]]
     return data
 
 def save_quickload_version(data, name, test_percentage):

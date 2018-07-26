@@ -405,12 +405,14 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
-    code_tokenizer = 'full'
     # bidirectional = False #DELETE
     bidirectional = bidirectional > 0
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset, tokenizer, no_dups, code_tokenizer)
+        use_full_dataset, use_split_dataset, tokenizer, no_dups, "code2vec")
+ 
+
+
 
     nn = Code2VecEmbedder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional)
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,

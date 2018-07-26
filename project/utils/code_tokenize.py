@@ -40,7 +40,7 @@ def populate_codepath_point_worker(data_queue, error_queue, new_data_queue):
             data_queue.task_done()
         except SyntaxError:
             error_queue.put(i)
-            print("SYNTAX ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
+            # print("SYNTAX ERROR in {}: name: {} pkg: {}".format(i, d['arg_name'], d['pkg']))
             data_queue.task_done()
         except queue.Empty:
             return
