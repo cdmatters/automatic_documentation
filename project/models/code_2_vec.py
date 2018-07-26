@@ -183,9 +183,6 @@ class Code2VecEmbedder(BasicRNNModel):
             h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
             state = tf.contrib.rnn.LSTMStateTuple(c, h)
 
-                
-
-
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size + self.code2vec_final_size
             if self.bidirectional:
@@ -205,12 +202,6 @@ class Code2VecEmbedder(BasicRNNModel):
                 decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
-            
-
-            # attention_mechanism2 = tf.contrib.seq2seq.LuongAttention(
-            #     decoder_rnn_size, second_encoder_outputs,
-            #     memory_sequence_length=second_data_seq_length,
-            #     name="LuongAttention2")
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
@@ -221,10 +212,6 @@ class Code2VecEmbedder(BasicRNNModel):
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism1,
                 attention_layer_size=self.rnn_size)
-
-            # decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
-            #     decoder_rnn_cell, attention_mechanism2,
-            #     attention_layer_size=self.code2vec_final_size)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
@@ -349,11 +336,12 @@ class Code2VecEmbedder(BasicRNNModel):
                 e+=1
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
-                _,  _, train_id, train_summary = self._feed_fwd(
+                _,  loss, train_id, train_summary = self._feed_fwd(
                     session, minibatch, ops, 'TRAIN')
+                print(loss)
                 filewriters["train_continuous"].add_summary(train_summary, i)
 
-                if epoch != e:
+                if epoch != e and False:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
                         session, data_tuple.train, max_points=5000)
