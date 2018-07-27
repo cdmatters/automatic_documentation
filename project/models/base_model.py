@@ -169,15 +169,18 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _build_rnn_training_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
-                                    input_label_seq_length, decode_embedded):
+                                    input_label_seq_length, decode_embedded, use_attention=True):
         with tf.name_scope("training"):
             batch_size = tf.shape(state[0])[0]
 
             helper = tf.contrib.seq2seq.TrainingHelper(
                 decode_embedded, input_label_seq_length, time_major=False)
 
-            decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
-                cell_state=state)
+            if use_attention:
+                decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+                    cell_state=state)
+            else:
+                decoder_initial_state = state
 
             decoder = tf.contrib.seq2seq.BasicDecoder(
                 decoder_rnn_cell, helper, decoder_initial_state,
@@ -187,15 +190,17 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _build_rnn_greedy_inference_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
-                                            start_tok, end_tok):
+                                            start_tok, end_tok, use_attention=True):
         with tf.name_scope("inference"):
             batch_size = tf.shape(state[0])[0]
 
             helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_weights,
                                                               tf.fill([batch_size], start_tok), end_tok)
-
-            decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
-                cell_state=state)
+            if use_attention:
+                decoder_initial_state = decoder_rnn_cell.zero_state(batch_size, dtype=tf.float32).clone(
+                    cell_state=state)
+            else:
+                decoder_initial_state = state
 
             decoder = tf.contrib.seq2seq.BasicDecoder(
                 decoder_rnn_cell, helper, decoder_initial_state,
