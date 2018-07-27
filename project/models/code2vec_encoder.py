@@ -25,7 +25,7 @@ SingleTranslationWithPaths.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTO
     s.name, s.code," ".join(s.description)," ".join(s.tokenized), " ".join(s.translation))
 
 
-class Code2VecEmbedder(BasicRNNModel):
+class Code2VecEncoder(BasicRNNModel):
 
     def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
                 dropout=0.3, bidirectional=False, vec_size=128, name="BasicModel"):
@@ -176,7 +176,6 @@ class Code2VecEmbedder(BasicRNNModel):
                 self.code2vec_final_size
                 )
 
-
             # 2. Build out Encoder
             if self.bidirectional:
                 first_encoder_outputs, first_state = self._build_bi_rnn_encoder(
@@ -188,9 +187,6 @@ class Code2VecEmbedder(BasicRNNModel):
             c = tf.concat([first_state.c, code2vec_embedding], axis = 1)
             h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
             state = tf.contrib.rnn.LSTMStateTuple(c, h)
-
-                
-
 
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size + self.code2vec_final_size
@@ -206,13 +202,11 @@ class Code2VecEmbedder(BasicRNNModel):
             projection_layer = layers_core.Dense(
                 desc_vocab_size, use_bias=False)
 
-
             attention_mechanism1 = tf.contrib.seq2seq.LuongAttention(
                 decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
             
-
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
                 input_keep_prob=dropout_keep_prob,
@@ -360,7 +354,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
 
 
 
-    nn = Code2VecEmbedder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional, vec_size)
+    nn = Code2VecEncoder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional, vec_size)
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 
