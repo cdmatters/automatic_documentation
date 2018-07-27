@@ -27,17 +27,15 @@ SingleTranslationWithPaths.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTO
 
 class Code2VecSolo(Code2VecEncoder):
 
-    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
-                dropout=0.3, bidirectional=False, vec_size=128, name="BasicModel"):
+    def __init__(self, embed_tuple, batch_size, learning_rate, 
+                dropout, vec_size, path_vocab, path_embed, path_seq, name="BasicModel"):
         BasicRNNModel.__init__(self, embed_tuple, name)
         # To Do; all these args from config, to make saving model easier.
 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.rnn_size = rnn_size
-        self.code2vec_final_size = vec_size
+        self.code2vec_size = vec_size
         self.dropout = dropout
-        self.bidirectional = bidirectional
 
         # Graph Variables (built later)
         self.input_data_sequence = None
@@ -50,13 +48,13 @@ class Code2VecSolo(Code2VecEncoder):
         self.inference_loss = None
         self.inference_id = None
         
-
-        self.dim = 300
-        vocab = 50000
+        self.path_seq = path_seq
+        self.path_embed = path_embed
+        self.path_vocab = path_vocab
         self.path_weights = np.random.uniform(
-             low=-0.1, high=0.1, size=[vocab, self.dim])
+             low=-0.1, high=0.1, size=[self.path_vocab, self.path_embed])
         self.input_target_var_weights = np.random.uniform(
-             low=-0.1, high=0.1, size=[vocab, self.dim])
+             low=-0.1, high=0.1, size=[self.path_vocab, self.path_embed])
 
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
@@ -64,11 +62,11 @@ class Code2VecSolo(Code2VecEncoder):
         LOGGER.debug("Init loaded")
         
     def arg_summary(self):
-        mod_args = "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
-            self.rnn_size, self.learning_rate, self.batch_size)
+        mod_args = "ModArgs: code2vec_size: {}, path_embed: {}, lr: {}, batch_size: {}, ".format(
+            self.code2vec_size, self.path_embed, self.learning_rate, self.batch_size)
 
-        data_args = "DataArgs: vocab_size: {}, char_embed: {}, word_embed: {}, dropout: {} ".format(
-            len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1], self.dropout)
+        data_args = "DataArgs: path_seq {}, vocab_size: {}, path_vocab: {}, word_embed: {}, dropout: {} ".format(
+            self.path_seq, len(self.word2idx), self.path_vocab, self.word_weights.shape[1], self.dropout)
         return "\n".join([mod_args, data_args])
 
     def _log_in_tensorboard(self):
@@ -138,8 +136,8 @@ class Code2VecSolo(Code2VecEncoder):
             code2vec_embedding = self._build_code2vec_vector(
                 encode_path_embedded, 
                 encode_tv_embedded, 
-                self.dim,
-                self.code2vec_final_size
+                self.path_embed,
+                self.code2vec_size
                 )
 
             c = code2vec_embedding
@@ -147,7 +145,7 @@ class Code2VecSolo(Code2VecEncoder):
             state = tf.contrib.rnn.LSTMStateTuple(c, h)
 
             # 3. Build out Cell ith attention
-            decoder_rnn_size = self.code2vec_final_size
+            decoder_rnn_size = self.code2vec_size
 
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
                     decoder_rnn_size, name="RNNencoder")
@@ -275,6 +273,7 @@ class Code2VecSolo(Code2VecEncoder):
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
+@args.code2vec_args
 @args.encoder_args
 @args.log_args
 @args.train_args
@@ -282,28 +281,27 @@ class Code2VecSolo(Code2VecEncoder):
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the basic LSTM model on the overfit dataset')
-    parser.add_argument('--vec-size', '-vs', dest='vec_size', action='store',
-                       type=int, default=200,
-                       help='size of code2vec vector')
     return parser
 
 
 def _run_model(name, logdir, test_freq, test_translate, save_every,
                lstm_size, dropout, lr, batch_size, epochs,
                vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups, vec_size, **kwargs):
+               use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups,
+               vec_size, path_seq, path_vocab, path_embed,  **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
 
     bidirectional = bidirectional > 0
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset, tokenizer, no_dups, "code2vec")
-    print(len(data_tuple))
+        use_full_dataset, use_split_dataset, tokenizer, no_dups, "code2vec", path_seq, path_vocab)
 
 
 
-    nn = Code2VecSolo(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional, vec_size)
+    nn = Code2VecSolo(embed_tuple, batch_size, lr, dropout, 
+                      vec_size, path_vocab, path_embed, path_seq)
+    
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
 

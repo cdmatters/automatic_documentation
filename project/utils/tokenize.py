@@ -260,18 +260,18 @@ def tokenize_vars_funcname_other_args_and_descriptions(data, word2idx, char2idx)
         fill_name_funcname_other_args_tok(d, char2idx)
     return data
 
-def tokenize_code2vec(data, word2idx, vocab_size=20000):
+def tokenize_code2vec(data, path_vocab, **kwargs):
     for d in data:
         d["path_idx"] = np.fromstring(d["path_idx"], dtype=int, sep=" ")
         d["target_var_idx"] = np.fromstring(d["target_var_idx"], dtype=int, sep=" ")
     
-        d["path_idx"][d["path_idx"] > vocab_size] = 0
-        d["target_var_idx"][d["target_var_idx"] > vocab_size] = 0
+        d["path_idx"][d["path_idx"] > path_vocab] = 1
+        d["target_var_idx"][d["target_var_idx"] > path_vocab] = 1
 
     return data 
 
 
-def tokenize_src_all_basic_tokens(data, word2idx):
+def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
     for i, d in enumerate(data):
         unk_token = word2idx[UNKNOWN_TOKEN]
         src_tok = nltk_tok(d['src'])
@@ -353,7 +353,7 @@ def choose_tokenizer(tokenizer):
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                    use_full_dataset, use_split_dataset, tokenizer='var_only', 
-                                   no_dups=0, code_tokenizer="full"):
+                                   no_dups=0, code_tokenizer="code2vec", path_seq=10000, path_vocab=10000):
     if code_tokenizer == "code2vec":
         data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=True)
     else:
@@ -372,9 +372,9 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
 
     code_tokenize = choose_code_tokenizer(code_tokenizer)
     print("Tokenizing the src code")
-    train_data = code_tokenize(data_tuple.train, word2idx)
-    valid_data = code_tokenize(data_tuple.valid, word2idx)
-    test_data = code_tokenize(data_tuple.test, word2idx)
+    train_data = code_tokenize(data_tuple.train, word2idx=word2idx, path_vocab=path_vocab)
+    valid_data = code_tokenize(data_tuple.valid, word2idx=word2idx, path_vocab=path_vocab)
+    test_data = code_tokenize(data_tuple.test, word2idx=word2idx, path_vocab=path_vocab)
     
     print("Extracting tensors train and test")
     
@@ -383,7 +383,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
 
     if code_tokenizer == 'code2vec':
         fields.extend(["path_idx", "target_var_idx"])
-        seq_lengths.extend([1000, 1000])
+        seq_lengths.extend([path_seq, path_seq])
     elif code_tokenizer == "full":
         fields.extend(["src_idx"])
         seq_lengths.extend([200])

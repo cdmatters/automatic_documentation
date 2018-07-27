@@ -6,7 +6,7 @@ def data_args(parse_fn):
     def wrapper(*args, **kwds):
         p = parse_fn(*args, **kwds)
         p.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                       type=int, default=40000,
+                       type=int, default=30000,
                        help='size of embedding vocab')
         p.add_argument('--char-seq', '-c', dest='char_seq', action='store',
                        type=int, default=24,
@@ -56,6 +56,25 @@ def log_args(parse_fn):
         p.add_argument('--save-every', '-E', dest='save_every', action='store',
                        type=int, default=5,
                        help='how often to save every run')
+        return p
+    return wrapper
+
+def code2vec_args(parse_fn):
+    @wraps(parse_fn)
+    def wrapper(*args, **kwds):
+        p = parse_fn(*args, **kwds)
+        p.add_argument('--path-seq', '-ps', dest='path_seq', action='store',
+                        type=int, default=5000,
+                        help='max number of paths to include')
+        p.add_argument('--path-vocab', '-pv', dest='path_vocab', action='store',
+                       type=int, default=10000,
+                       help='vocab of paths recognised')
+        p.add_argument('--path-embed', '-pe', dest='path_embed', action='store',
+                       type=int, default=200,
+                       help='size of initial path and var embeddings')
+        p.add_argument('--code2vec-size', '-vs', dest='vec_size', action='store',
+                       type=int, default=200,
+                       help='size of code2vec vector')
         return p
     return wrapper
 
