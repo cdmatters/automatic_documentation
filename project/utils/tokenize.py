@@ -285,7 +285,12 @@ def extract_tensors(data, fields, seq_lengths):
     tensors = [[] for _ in fields]
     for d in data:
         for t, f, s in zip(tensors, fields, seq_lengths):
-            pad = [d[f][i] if i < len(d[f]) else 0 for i in range(s)]
+            a = np.array(d[f])
+            if len(d[f]) < s:
+                pad = np.pad(a, (0, s - len(d[f])), 'constant')
+            else:
+                pad = a[:s]
+            # pad = [d[f][i] if i < len(d[f]) else 0 for i in range(s)]
             t.append(np.array(pad))
     return [np.stack(t) for t in tensors]
 
