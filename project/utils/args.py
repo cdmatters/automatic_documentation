@@ -6,7 +6,7 @@ def data_args(parse_fn):
     def wrapper(*args, **kwds):
         p = parse_fn(*args, **kwds)
         p.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                       type=int, default=50000,
+                       type=int, default=40000,
                        help='size of embedding vocab')
         p.add_argument('--char-seq', '-c', dest='char_seq', action='store',
                        type=int, default=24,
@@ -56,6 +56,19 @@ def log_args(parse_fn):
         p.add_argument('--save-every', '-E', dest='save_every', action='store',
                        type=int, default=5,
                        help='how often to save every run')
+        return p
+    return wrapper
+
+def encoder_args(parse_fn):
+    @wraps(parse_fn)
+    def wrapper(*args, **kwds):
+        p = parse_fn(*args, **kwds)
+        p.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
+                        type=int, default=200,
+                        help='size of LSTM size')
+        p.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
+                       type=int, default=1,
+                       help='use bidirectional lstm')
         return p
     return wrapper
 

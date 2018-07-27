@@ -19,10 +19,10 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 
 LOGGER = logging.getLogger('')
 
-SingleTranslationWithCode = namedtuple(
-    "Translation", ['name', 'description', 'translation', 'code'])
-SingleTranslationWithCode.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nINFR: {}\n".format(
-    s.name, " ".join(s.code)," ".join(s.description), " ".join(s.translation))
+SingleTranslationWithPaths = namedtuple(
+    "Translation", ['name', 'description', 'tokenized', 'translation', 'code'])
+SingleTranslationWithPaths.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTOKN: {}\nINFR: {}\n".format(
+    s.name, s.code," ".join(s.description)," ".join(s.tokenized), " ".join(s.translation))
 
 
 class Code2VecEmbedder(BasicRNNModel):
@@ -62,6 +62,7 @@ class Code2VecEmbedder(BasicRNNModel):
         self.merged_metrics = self._log_in_tensorboard()
 
         LOGGER.debug("Init loaded")
+        
     def arg_summary(self):
         mod_args = "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
             self.rnn_size, self.learning_rate, self.batch_size)
@@ -73,6 +74,11 @@ class Code2VecEmbedder(BasicRNNModel):
     def _log_in_tensorboard(self):
         tf.summary.scalar('loss', self.train_loss)
         return tf.summary.merge_all()
+
+    def build_translations(self, all_names, all_references, all_references_tok, all_translations, all_data):
+        get_path_stats = lambda x: "Paths: {}/{},  Of Which <UNK> {}".format(np.count_nonzero(x), len(x), (x==1).sum())
+        return [SingleTranslationWithPaths(n, r[0], t[0], tr, get_path_stats(s)) for n, r, t, tr, s in zip(
+            all_names, all_references, all_references_tok, all_translations, all_data[2])]
 
     @staticmethod
     def _build_code2vec_encoder(input_codepaths, path_weights,
@@ -256,55 +262,7 @@ class Code2VecEmbedder(BasicRNNModel):
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
     
-    def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
-        all_names = []
-        all_references = []
-        all_translations = []
-        all_training_loss = []
-        all_src_code = []
 
-        ops = [self.merged_metrics, self.train_loss, self.inference_id]
-        restricted_data = tuple([d[:max_points] for d in data])
-        for _, minibatch in self._to_batch(restricted_data):
-
-            metrics, train_loss, inference_ids = self._feed_fwd(
-                session, minibatch, ops)
-
-            # Translating quirks:
-            #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
-            #    references: RETURN: [['<START>', 'this', 'reference', '<END>']] 
-            #                NOT: ['<START>', 'this', 'reference','<END>'],
-            #                     because compute_bleu takes multiple references
-            #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
-            #                  NOT: ['this', 'translation', '<END>']
-            arg_name, arg_desc, paths = minibatch[0], minibatch[1], minibatch[2]
-            names = [self.translate(i, lookup=self.idx2char).replace(
-                " ", "") for i in arg_name]
-            src_code = [ ["Paths: {} NonZero Paths {} ".format(len(p), np.count_nonzero(p))] for p in paths]
-            references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
-            translations = [self.translate(
-                i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN])[1:-1] for i in inference_ids]
-
-            all_training_loss.append(train_loss)
-            all_names.extend(names)
-            all_references.extend(references)
-            all_translations.extend(translations)
-            all_src_code.extend(src_code)
-
-        # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
-        # To Do: Replace with NLTK:
-        #         smoother = SmoothingFunction()
-        #         bleu_score = corpus_bleu(all_references, all_translations, 
-        #                                  smoothing_function=smoother.method2)
-        bleu_tuple = bleu.compute_bleu(
-            all_references, all_translations, max_order=4, smooth=False)
-        av_loss = np.mean(all_training_loss)
-
-        translations = [SingleTranslationWithCode(n, d[0], t, s) for n, d, t, s in zip(
-            all_names, all_references, all_translations, all_src_code)]
-
-        return bleu_tuple, av_loss, translations[:max_translations]
-    
     def _feed_fwd(self, session, minibatch, operation, mode=None):
         """
         Evaluates a node in the graph
@@ -316,7 +274,7 @@ class Code2VecEmbedder(BasicRNNModel):
         Returns
             output of the operation
         """
-        input_data, input_labels, input_paths, input_target_vars  = minibatch
+        input_data, input_labels, input_paths, input_target_vars  = minibatch[0], minibatch[1], minibatch[2], minibatch[3]
         run_ouputs = operation
         feed_dict = {self.input_data_sequence: input_data,
                      self.input_label_sequence: input_labels,
@@ -374,20 +332,15 @@ class Code2VecEmbedder(BasicRNNModel):
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
+@args.encoder_args
 @args.log_args
 @args.train_args
 @args.data_args
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the basic LSTM model on the overfit dataset')
-    parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
-                        type=int, default=128,
-                        help='size of LSTM size')
-    parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
-                       type=int, default=1,
-                       help='use bidirectional lstm')
     parser.add_argument('--vec-size', '-vs', dest='vec_size', action='store',
-                       type=int, default=1,
+                       type=int, default=200,
                        help='size of code2vec vector')
     return parser
 

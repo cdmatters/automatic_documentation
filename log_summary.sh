@@ -22,7 +22,8 @@ function log_summary(){
   $func $@ | \
     sed -E -e "s/^[0-9]{4}_([0-9]{2}:[0-9]{2})\s+(INFO|DEBUG|WARNING|ERROR) -/$bold$black\1 -$reset/" -e \
               "s/ARGN:(.*)<END>/ARGN:$bold\1$reset<END>/" -e \
-              "s/(ARGN:|DESC:|INFR:)/$bold$green\1$reset/" -e \
+              "s/(ARGN:|DESC:|INFR:|CODE:|TOKN:)/$bold$green\1$reset/" -e \
+              "s/(INFR[123]:)/$bold$yellow\1$reset/" -e \
               "s/(MINIBATCHES:|TRAIN_BLEU:|VALID_BLEU:|TEST_BLEU:)/$bold\1$reset/" -e \
               "s/(----*)/$bold$black\1$reset/" -e \
               "s/(TRAINING:.*)/$bold$blue\1$reset/" -e \

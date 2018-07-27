@@ -23,9 +23,10 @@ DATA: vocab_size: {vocab}, char_seq: {char}, desc_seq: {desc},
 '''
 
 SingleTranslation = namedtuple(
-    "Translation", ['name', 'description', 'translation'])
-SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nINFR: {}".format(
-    s.name, " ".join(s.description), " ".join(s.translation))
+    "Translation", ['name', 'description', 'tokenized', 'translation'])
+SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nTOKN: {}\nINFR: {}\n".format(
+    s.name," ".join(s.description), " ".join(s.tokenized), " ".join(s.translation))
+
 
 exp_sum = ['nn', 'vocab', 'char_seq', 'desc_seq', 'char_embed', 'desc_embed', 'full_dataset', 'split_dataset']
 ExperimentSummary = namedtuple("ExperimentSummary", exp_sum)
@@ -297,6 +298,7 @@ class BasicRNNModel(abc.ABC):
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
         all_references = []
+        all_references_tok = []
         all_translations = []
         all_training_loss = []
 
@@ -314,10 +316,12 @@ class BasicRNNModel(abc.ABC):
             #                     because compute_bleu takes multiple references
             #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
             #                  NOT: ['this', 'translation', '<END>']
-            arg_name, arg_desc = minibatch[0], minibatch[1]
+            arg_name, arg_desc, arg_desc_translate = minibatch[0], minibatch[1], minibatch[-1]
             names = [self.translate(i, lookup=self.idx2char).replace(
                 " ", "") for i in arg_name]
-            references = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
+
+            references = [[t] for t in arg_desc_translate]
+            references_tokenized = [[self.translate(i, do_join=False)[1:-1]] for i in arg_desc]
             translations = [self.translate(
                 i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN])[1:-1] for i in inference_ids]
 
@@ -326,6 +330,7 @@ class BasicRNNModel(abc.ABC):
             all_training_loss.append(train_loss)
             all_names.extend(names)
             all_references.extend(references)
+            all_references_tok.extend(references_tokenized)
             all_translations.extend(translations)
 
         # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
@@ -337,11 +342,12 @@ class BasicRNNModel(abc.ABC):
             all_references, all_translations, max_order=4, smooth=False)
         av_loss = np.mean(all_training_loss)
 
-        translations = [SingleTranslation(n, d[0], t) for n, d, t in zip(
-            all_names, all_references, all_translations)]
-
+        translations = self.build_translations(all_names, all_references, all_references_tok, all_translations, restricted_data)
         return bleu_tuple, av_loss, translations[:max_translations]
 
+@abc.abstractmethod
+def build_translations(self, all_names, all_references, all_tokenized, all_translations, all_data):
+    pass
 
 def argparse_basic_wrap(parser):
     parser.add_argument('--epochs', '-e', dest='epochs', action='store',

@@ -149,6 +149,7 @@ def nltk_tok(desc):
 def fill_descriptions_tok(d, word2idx):
     unk_token = word2idx[UNKNOWN_TOKEN]
     desc_tok = nltk_tok(d['arg_desc'])
+    d['arg_desc_translate'] = desc_tok
 
     d['arg_desc_tokens'] = [START_OF_TEXT_TOKEN]
     d['arg_desc_idx'] = [word2idx[START_OF_TEXT_TOKEN]]
@@ -286,25 +287,15 @@ def extract_tensors(data, fields, seq_lengths):
         for t, f, s in zip(tensors, fields, seq_lengths):
             pad = [d[f][i] if i < len(d[f]) else 0 for i in range(s)]
             t.append(np.array(pad))
-    return tuple([np.stack(t) for t in tensors])
+    return [np.stack(t) for t in tensors]
 
-def extract_char_and_desc_code_idx_tensors(data, char_seq, desc_seq, code_seq):
-    chars = []
-    descs = []
-    code = []
-    for d in data:
-        char_pad = [d['arg_name_idx'][i] if i < len(
-            d['arg_name_idx']) else 0 for i in range(char_seq)]
-        chars.append(np.array(char_pad))
+def extract_transations(data):
+    return [d['arg_desc_translate'] for d in data]
 
-        desc_pad = [d['arg_desc_idx'][i] if i < len(
-            d['arg_desc_idx']) else 0 for i in range(desc_seq)]
-        descs.append(np.array(desc_pad))
-
-        code_pad = [d['src_idx'][i] if i < len(
-            d['src_idx']) else 0 for i in range(code_seq)]
-        code.append(np.array(code_pad))
-    return np.stack(chars), np.stack(descs), np.stack(code)
+def extract_model_data(data, fields, seq_lengths):
+    tensors = extract_tensors(data, fields, seq_lengths)
+    translations = extract_transations(data)
+    return tuple(tensors + [translations])
 
 
 def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=False):
@@ -397,19 +388,11 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
         fields.extend(["src_idx"])
         seq_lengths.extend([200])
     
-    train_data = extract_tensors(train_data, fields, seq_lengths)
-    valid_data = extract_tensors(valid_data, fields, seq_lengths)
-    test_data = extract_tensors(test_data, fields, seq_lengths)
+    train_data = extract_model_data(train_data, fields, seq_lengths)
+    valid_data = extract_model_data(valid_data, fields, seq_lengths)
+    test_data = extract_model_data(test_data, fields, seq_lengths)
 
-    # train_data = extract_char_and_desc_code_idx_tensors(
-    #     train_data, char_seq, desc_seq, code_seq)
-    # valid_data = extract_char_and_desc_code_idx_tensors(
-    #     valid_data, char_seq, desc_seq, code_seq)
-    # test_data = extract_char_and_desc_code_idx_tensors(
-    #     test_data, char_seq, desc_seq, code_seq)
-    # print(train_data.shape)
     return EmbedTuple(word_weights, word2idx, char_weights, char2idx), DataTuple(train_data, valid_data, test_data, "Tensors")
-
 
 if __name__ == '__main__':
     # from project.data.preprocessed.overfit import overfit_data as DATA

@@ -3,7 +3,6 @@ import os
 
 from yaml import load, dump, CLoader, CDumper
 from yaml.constructor import Constructor
-from pyaml import dump as pdump
 
 
 # Deal with Yaml 1.2 and 1.1 incompatibilty: Turn off 'on' == True (bool)

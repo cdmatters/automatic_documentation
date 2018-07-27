@@ -57,7 +57,7 @@ class HashtableBaseline(object):
             translation = random.choice(descriptions)
 
             translations.append(SingleTranslation(
-                hash_string, d["arg_desc_tokens"], translation))
+                hash_string, d["arg_desc_translate"], d["arg_desc_tokens"], translation))
         return translations
 
     def train(self, train_data):

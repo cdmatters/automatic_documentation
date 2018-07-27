@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 import argparse
+from collections import namedtuple
 import logging
 
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
-from project.models.base_model import BasicRNNModel, ExperimentSummary
+from project.models.base_model import BasicRNNModel, ExperimentSummary, SingleTranslation
 import project.utils.args as args
 import project.utils.logging as log_util
 import project.utils.saveload as saveload
@@ -15,6 +16,7 @@ from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
 
 
 LOGGER = logging.getLogger('')
+
 
 
 class CharSeqBaseline(BasicRNNModel):
@@ -45,6 +47,11 @@ class CharSeqBaseline(BasicRNNModel):
         self.merged_metrics = self._log_in_tensorboard()
 
         LOGGER.debug("Init loaded")
+
+    def build_translations(self, all_names, all_references, all_tokenized, all_translations, all_data):
+        return [SingleTranslation(n, r[0], t[0], tr) for n, r, t, tr in zip(
+            all_names, all_references, all_tokenized, all_translations)]
+
 
     def arg_summary(self):
         mod_args = "ModArgs: rnn_size: {}, lr: {}, batch_size: {}, ".format(
@@ -80,26 +87,27 @@ class CharSeqBaseline(BasicRNNModel):
             if self.bidirectional:
                 encoder_outputs, state = self._build_bi_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
+
             else:
                 encoder_outputs, state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob)
 
             # 3. Build out Cell ith attention
-            decoder_size = self.rnn_size
+            decode_rnn_size = self.rnn_size
             if self.bidirectional:
-                decoder_size = decoder_size * 2
+                decode_rnn_size = self.rnn_size * 2
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_size, name="RNNencoder")
+                    decode_rnn_size, name="RNNencoder")
             else:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_size, name="RNNencoder")
+                    decode_rnn_size, name="RNNencoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
                 desc_vocab_size, use_bias=False)
 
             attention_mechanism = tf.contrib.seq2seq.LuongAttention(
-                decoder_size, encoder_outputs,
+                decode_rnn_size, encoder_outputs,
                 memory_sequence_length=input_data_seq_length)
 
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
@@ -110,7 +118,7 @@ class CharSeqBaseline(BasicRNNModel):
 
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism,
-                attention_layer_size=decoder_size)
+                attention_layer_size=decode_rnn_size)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
@@ -153,13 +161,17 @@ class CharSeqBaseline(BasicRNNModel):
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
-            for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
+            # for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
+            i, (e, minibatch) = next(enumerate(self._to_batch(data_tuple.train, epochs)))
+            while True:
+                # i+=1
+                e+=1
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
-                _,  loss, train_id, train_summary = self._feed_fwd(
+                _,  _, train_id, train_summary = self._feed_fwd(
                     session, minibatch, ops, 'TRAIN')
                 filewriters["train_continuous"].add_summary(train_summary, i)
-                
+
                 if epoch != e:
                     epoch = e
                     evaluation_tuple = self.evaluate_bleu(
@@ -198,16 +210,10 @@ class CharSeqBaseline(BasicRNNModel):
 @args.log_args
 @args.train_args
 @args.data_args
+@args.encoder_args
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the basic LSTM model on the overfit dataset')
-    parser.add_argument('--lstm-size', '-l', dest='lstm_size', action='store',
-                        type=int, default=300,
-                        help='size of LSTM size')
-    parser.add_argument('--bidirectional', '-bi', dest='bidirectional', action='store',
-                       type=bool, default=True,
-                       help='use bidirectional lstm')
-
     return parser
 
 
@@ -217,8 +223,8 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
                use_full_dataset, use_split_dataset, tokenizer, bidirectional, no_dups, **kwargs):
     log_path = log_util.to_log_path(logdir, name)
     log_util.setup_logger(log_path)
-
     bidirectional = bidirectional > 0
+    print(bidirectional)
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
         use_full_dataset, use_split_dataset, tokenizer, no_dups)
