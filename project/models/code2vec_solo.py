@@ -77,28 +77,6 @@ class Code2VecSolo(Code2VecEncoder):
         return [SingleTranslationWithPaths(n, r[0], t[0], tr, get_path_stats(s)) for n, r, t, tr, s in zip(
             all_names, all_references, all_references_tok, all_translations, all_data[2])]
 
-    @staticmethod
-    def _build_code2vec_encoder(input_codepaths, path_weights,
-                                target_var_variable, target_var_weights):
-        with tf.name_scope("code2vec_embeddings"):
-            # 1. Embed Our "codepath" as a whole sequence
-            codepath_vocab_size, codepath_size = path_weights.shape
-            path_initializer = tf.constant_initializer(path_weights)
-            path_embedding = tf.get_variable("path_embed", [codepath_vocab_size, codepath_size],
-                                             initializer=path_initializer, trainable=True)
-            encode_path_embedded = tf.nn.embedding_lookup(
-                path_embedding, input_codepaths)
-
-            # 2. Embed Our "target_var" as a word
-            target_var_vocab_size, target_var_size = target_var_weights.shape
-            target_var_initializer = tf.constant_initializer(target_var_weights)
-            target_var_embedding = tf.get_variable("target_embed", [target_var_vocab_size, target_var_size],
-                                             initializer=target_var_initializer, trainable=True)
-            encode_target_var_embedded = tf.nn.embedding_lookup(
-                target_var_embedding, target_var_variable)
-
-            return encode_path_embedded, encode_target_var_embedded, path_embedding, target_var_embedding
-
     def _build_train_graph(self):
         with tf.name_scope("Model_{}".format(self.name)):
             # 0. Define our placeholders and derived vars
@@ -257,7 +235,10 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
-    
+
+
+    LOGGER.warning("\n".join([str(v) for v in tf.trainable_variables()]))
+
     LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
     LOGGER.multiline_info(summary)
 
@@ -276,6 +257,9 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     # log_util.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
     nn.main(sess, epochs, data_tuple, log_path, filewriters,
             test_check=test_freq, test_translate=test_translate)
+
+    print(sess.run([tf.get_variable('MLP_B'], feed_dict={}))
+
 
 
 if __name__ == "__main__":
