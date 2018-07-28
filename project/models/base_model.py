@@ -8,37 +8,34 @@ import numpy as np
 import tensorflow as tf
 
 from project.external.nmt import bleu
-from project.utils.tokenize import START_OF_TEXT_TOKEN
 import project.utils.logging as log_util
 import project.utils.saveload as saveload
+from project.utils.tokenize import START_OF_TEXT_TOKEN, \
+                         get_embed_tuple_and_data_tuple
 
 LOGGER = logging.getLogger('')
 
 
-EXPERIMENT_SUMMARY_STRING = '''
+ARGUMENT_SUMMARY_STRING = '''
 ------------------------------------------------------
-------------------------------------------------------
-DATA: vocab_size: {vocab}, char_seq: {char}, desc_seq: {desc},
-       char_embed: {c_embed}, desc_embed: {d_embed},
-       full_dataset: {full}, split_dataset: {split}
 ------------------------------------------------------
 {nn}
 ------------------------------------------------------
+ARGS: 
+{kwargs}
+------------------------------------------------------
 ------------------------------------------------------
 '''
-
 SingleTranslation = namedtuple(
     "Translation", ['name', 'description', 'tokenized', 'translation'])
 SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nTOKN: {}\nINFR: {}\n".format(
     s.name," ".join(s.description), " ".join(s.tokenized), " ".join(s.translation))
 
 
-exp_sum = ['nn', 'vocab', 'char_seq', 'desc_seq', 'char_embed', 'desc_embed', 'full_dataset', 'split_dataset']
-ExperimentSummary = namedtuple("ExperimentSummary", exp_sum)
-ExperimentSummary.__str__ = lambda s: EXPERIMENT_SUMMARY_STRING.format(
-    vocab=s.vocab, char=s.char_seq, desc=s.desc_seq,
-    full=s.full_dataset, nn=s.nn, split=s.split_dataset,
-    c_embed=s.char_embed, d_embed=s.desc_embed)
+arg_sum = ['nn', 'kwargs']
+ArgumentSummary = namedtuple("ArgumentSummary", arg_sum)
+ArgumentSummary.__str__ = lambda s: ARGUMENT_SUMMARY_STRING.format(
+  nn=s.nn, kwargs="\n".join(["{} : {}".format(k,v) for k,v in sorted(s.kwargs.items())]))
 
 np.random.seed(100)
 
@@ -330,10 +327,10 @@ class BasicRNNModel(abc.ABC):
 
             # Translating quirks:
             #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
-            #    references: RETURN: [['<START>', 'this', 'reference', '<END>']] 
+            #    references: RETURN: [['this', 'reference']] 
             #                NOT: ['<START>', 'this', 'reference','<END>'],
             #                     because compute_bleu takes multiple references
-            #    translations: RETURN: ['<START>', 'this', 'translation', '<END>'] 
+            #    translations: RETURN: ['this', 'translation'] 
             #                  NOT: ['this', 'translation', '<END>']
             arg_name, arg_desc, arg_desc_translate = minibatch[0], minibatch[1], minibatch[-1]
             names = [self.translate(i, lookup=self.idx2char).replace(
@@ -348,7 +345,7 @@ class BasicRNNModel(abc.ABC):
             for t in all_translations:
                 if t == []:
                     LOGGER.warning("EMPTY TRANSLATION")
-                    t.append("")
+                    t.append(" ")
 
             all_training_loss.append(train_loss)
             all_names.extend(names)
@@ -414,6 +411,34 @@ class BasicRNNModel(abc.ABC):
             saveload.save(session, log_dir, self.name, i)
 
 
+def _run_model(Model, **kwargs):
+    kwargs["bidirectional"] =  kwargs["bidirectional"] > 0
+    log_path = log_util.to_log_path(kwargs["logdir"], kwargs["name"])
+    
+    log_util.setup_logger(log_path)
+    
+    embed_tuple, data_tuple = get_embed_tuple_and_data_tuple(**kwargs)
+    nn = Model(embed_tuple, **kwargs)
+
+    summary = ArgumentSummary(nn, kwargs)
+
+    log_util.run_model_startup_log(summary, log_path)
+
+    init = tf.group(tf.global_variables_initializer(),
+                    tf.local_variables_initializer())
+    
+    session_conf = tf.ConfigProto(intra_op_parallelism_threads=4, 
+                                  inter_op_parallelism_threads=4)
+    sess = tf.Session(config=session_conf)
+
+    saveload.setup_saver(kwargs["save_every"])
+    
+    filewriters = log_util.get_filewriters(log_path, sess)
+
+    sess.run(init)
+
+    nn.main(sess, kwargs["epochs"], data_tuple, log_path, filewriters,
+            test_check=kwargs["test_freq"], test_translate=kwargs["test_translate"])
 
 
 if __name__ == "__main__":

@@ -36,6 +36,10 @@ def build_translation_log_string(prefix, bleu_tuple, loss, translations):
     ]
     return "\n".join(log)
 
+def run_model_startup_log(summary, log_path):
+    LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
+    LOGGER.multiline_info(summary)
+    LOGGER.warning("\n".join([str(v) for v in tf.trainable_variables()]))
 
 def get_filewriters(logpath, session):
     return {

@@ -8,7 +8,7 @@ import nltk
 import numpy as np
 
 from project.external.nmt import bleu
-from project.models.base_model import ExperimentSummary, SingleTranslation
+from project.models.base_model import ArgumentSummary, SingleTranslation
 from project.utils import args, tokenize
 
 
@@ -86,25 +86,23 @@ class HashtableBaseline(object):
         return bleu
 
 
-def _run_model(vocab_size, char_seq, desc_seq, use_full_dataset, use_split_dataset, tokenizer, 
-               no_dups, desc_embed, char_embed, n_times, **kwargs):
-    data_tuple = tokenize.get_data_tuple(use_full_dataset, use_split_dataset, no_dups)
+def _run_model(**kwargs):
+    data_tuple = tokenize.get_data_tuple(kwargs['use_full_dataset'], kwargs['use_split_dataset'], kwargs['no_dups'])
     print("Loading GloVe weights and word to index lookup table")
 
-    _, word2idx = tokenize.get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
+    _, word2idx = tokenize.get_weights_word2idx(kwargs['desc_embed'], kwargs['vocab_size'], data_tuple.train)
     _ = defaultdict(int)
 
-    this_tokenizer = tokenize.choose_tokenizer(tokenizer)
+    this_tokenizer = tokenize.choose_tokenizer(kwargs['tokenizer'])
     train_data = this_tokenizer(data_tuple.train, word2idx, _)
     valid_data = this_tokenizer(data_tuple.valid, word2idx, _)
 
     model = HashtableBaseline()
-    summary = ExperimentSummary(
-        model, vocab_size, char_seq, desc_seq, None, None, use_full_dataset, use_split_dataset)
+    summary = ArgumentSummary(model, kwargs)
     print(summary)
 
     results = []
-    for i in range(n_times):
+    for i in range(kwargs['n_times']):
         random.seed(i)
         results.append(model.main(train_data, valid_data))
 

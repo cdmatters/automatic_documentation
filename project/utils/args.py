@@ -101,7 +101,7 @@ def train_args(parse_fn):
         p.add_argument('--epochs', '-e', dest='epochs', action='store',
                        type=int, default=200,
                        help='minibatch size for model')
-        p.add_argument('--learning-rate', '-r', dest='lr', action='store',
+        p.add_argument('--learning-rate', '-r', dest='learning_rate', action='store',
                        type=float, default=0.001,
                        help='learning rate for model')
         p.add_argument('--batch-size', '-b', dest='batch_size', action='store',

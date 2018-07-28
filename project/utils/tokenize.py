@@ -358,7 +358,7 @@ def choose_tokenizer(tokenizer):
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                    use_full_dataset, use_split_dataset, tokenizer, 
-                                   no_dups, code_tokenizer, path_seq=10000, path_vocab=10000, **kwargs):
+                                   no_dups, code_tokenizer, path_seq=1000, path_vocab=1000, **_):
     
     c2v =  (code_tokenizer == "code2vec")
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=c2v)

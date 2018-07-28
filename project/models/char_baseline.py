@@ -5,11 +5,8 @@ import logging
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
-from project.models.base_model import BasicRNNModel, ExperimentSummary, SingleTranslation
+from project.models.base_model import BasicRNNModel, SingleTranslation, _run_model
 import project.utils.args as args
-import project.utils.logging as log_util
-import project.utils.saveload as saveload
-import project.utils.tokenize as tokenize
 from project.utils.tokenize import START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
 
@@ -19,14 +16,14 @@ LOGGER = logging.getLogger('')
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
-                dropout=0.3, bidirectional=False, name="BasicModel"):
-        super().__init__(embed_tuple, name)
+    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate, 
+                dropout, bidirectional, model_name="BasicModel", **_):
+        super().__init__(embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
 
         self.batch_size = batch_size
         self.learning_rate = learning_rate
-        self.rnn_size = rnn_size
+        self.rnn_size = lstm_size
         self.dropout = dropout
         self.bidirectional = bidirectional
 
@@ -155,6 +152,8 @@ class CharSeqBaseline(BasicRNNModel):
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
 
+def run_model(**kwargs):
+    return _run_model(CharSeqBaseline, **kwargs)
 
 @args.log_args
 @args.train_args
@@ -165,47 +164,8 @@ def _build_argparser():
         description='Run the basic LSTM model on the overfit dataset')
     return parser
 
-
-def _run_model(name, logdir, test_freq, test_translate, save_every,
-               lstm_size, dropout, lr, batch_size, epochs,
-               vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-               use_full_dataset, use_split_dataset, tokenizer, bidirectional,
-               no_dups, code_tokenizer, **kwargs):
-    log_path = log_util.to_log_path(logdir, name)
-    log_util.setup_logger(log_path)
-    
-    bidirectional = bidirectional > 0
-    embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
-        vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-        use_full_dataset, use_split_dataset, tokenizer, no_dups, code_tokenizer)
-    
-    nn = CharSeqBaseline(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional)
-
-    summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                use_full_dataset, use_split_dataset)
-
-    LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
-    LOGGER.multiline_info(summary)
-
-    init = tf.group(tf.global_variables_initializer(),
-                    tf.local_variables_initializer())
-    
-    session_conf = tf.ConfigProto(
-        intra_op_parallelism_threads=4,
-        inter_op_parallelism_threads=4)
-    sess = tf.Session(config=session_conf)
-
-    saveload.setup_saver(save_every)
-    filewriters = log_util.get_filewriters(log_path, sess)
-
-    sess.run(init)
-    # log_util.load(sess, "logdir_0618_204400", "BasicModel.ckpt-1" )
-    nn.main(sess, epochs, data_tuple, log_path, filewriters,
-            test_check=test_freq, test_translate=test_translate)
-
-
 if __name__ == "__main__":
     parser = _build_argparser()
     args = parser.parse_args()
 
-    _run_model(**vars(args))
+    run_model(**vars(args))
