@@ -59,6 +59,9 @@ def log_args(parse_fn):
         p.add_argument('--save-every', '-E', dest='save_every', action='store',
                        type=int, default=5,
                        help='how often to save every run')
+        p.add_argument('--mode', '-M', dest='mode', action='store',
+                       type=str, default="TRAIN",
+                       help='TRAIN, LOAD, RETURN')
         return p
     return wrapper
 

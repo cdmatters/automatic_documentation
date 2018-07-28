@@ -345,7 +345,7 @@ class BasicRNNModel(abc.ABC):
             for t in all_translations:
                 if t == []:
                     LOGGER.warning("EMPTY TRANSLATION")
-                    t.append(" ")
+                    t.append("<NOTRANSLATION>")
 
             all_training_loss.append(train_loss)
             all_names.extend(names)
@@ -365,11 +365,13 @@ class BasicRNNModel(abc.ABC):
         translations = self.build_translations(all_names, all_references, all_references_tok, all_translations, restricted_data)
         return bleu_tuple, av_loss, translations[:max_translations]
     
-    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
+    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0, initial_step=0):
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
             for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
+                i = i + initial_step
+
                 ops = [self.update, self.train_loss,
                        self.train_id, self.merged_metrics]
                 _,  _, train_id, train_summary = self._feed_fwd(
@@ -397,7 +399,7 @@ class BasicRNNModel(abc.ABC):
                     log_util.log_std_out(
                         e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
 
-                    if i > 0:
+                    if e % 10 == 0 and e > 0:
                         saveload.save(session, log_dir, self.name, i)
 
                     recent_losses.append(valid_evaluation_tuple[-2])
@@ -412,18 +414,30 @@ class BasicRNNModel(abc.ABC):
 
 
 def _run_model(Model, **kwargs):
-    kwargs["bidirectional"] =  kwargs["bidirectional"] > 0
-    log_path = log_util.to_log_path(kwargs["logdir"], kwargs["name"])
-    
-    log_util.setup_logger(log_path)
+    mode = kwargs.pop("mode")
+    kwargs["bidirectional"] =  kwargs.get("bidirectional", 0) > 0
+
+    if mode == "TRAIN":
+        log_path = log_util.to_log_path(kwargs["logdir"], kwargs["name"])
+        log_util.setup_logger(log_path)
+        
+        kwargs['git'] = saveload.get_githash()
+        saveload.save_args(log_path, kwargs)
+    else:
+        log_path = kwargs["logdir"]
+        LOGGER.warning('LOADING FROM: {}, overwriting kwargs'.format(log_path))
+        kwargs = saveload.load_args(log_path)
+        log_util.setup_logger(log_path)
+
     
     embed_tuple, data_tuple = get_embed_tuple_and_data_tuple(**kwargs)
     nn = Model(embed_tuple, **kwargs)
 
     summary = ArgumentSummary(nn, kwargs)
-
-    log_util.run_model_startup_log(summary, log_path)
-
+    
+    if mode != "RETURN":
+        log_util.run_model_startup_log(summary, log_path)
+    
     init = tf.group(tf.global_variables_initializer(),
                     tf.local_variables_initializer())
     
@@ -435,10 +449,21 @@ def _run_model(Model, **kwargs):
     
     filewriters = log_util.get_filewriters(log_path, sess)
 
-    sess.run(init)
+    if mode == "TRAIN":
+        sess.run(init)
+        step = 0 
+    else:
+        _, step = saveload.load(sess, log_path)
+        LOGGER.warning("Loaded from {}: Global Step {}".format(log_path, step))
 
-    nn.main(sess, kwargs["epochs"], data_tuple, log_path, filewriters,
-            test_check=kwargs["test_freq"], test_translate=kwargs["test_translate"])
+    if mode in ["TRAIN", "LOAD"]:
+        nn.main(sess, kwargs["epochs"], data_tuple, log_path, filewriters,
+            test_check=kwargs["test_freq"], test_translate=kwargs["test_translate"],
+            initial_step=step)
+    elif mode == "RETURN":
+        return sess, nn, data_tuple, step 
+    else:
+        assert False
 
 
 if __name__ == "__main__":
