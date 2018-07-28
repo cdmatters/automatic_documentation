@@ -64,6 +64,30 @@ class DoubleEncoderBaseline(BasicRNNModel):
             len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1], self.dropout)
         return "\n".join([mod_args, data_args])
 
+    @staticmethod
+    def _concat_vectors(first_state, second_state, concat_size, rnn_size):
+        with tf.variable_scope("double_enc_concat", reuse=tf.AUTO_REUSE):
+            c = tf.concat([first_state.c, second_state.c], axis = 1)
+            h = tf.concat([first_state.h, second_state.h], axis = 1)
+
+
+            W = tf.get_variable("ConcatMLP_W", 
+                [concat_size, rnn_size],  
+                dtype=tf.float32,
+                initializer=tf.contrib.layers.xavier_initializer())
+            
+            B = tf.get_variable("ConcatMLP_B", 
+                [rnn_size],
+                dtype=tf.float32,
+                initializer=tf.contrib.layers.xavier_initializer())
+
+            Zc = tf.add(tf.matmul(c, W), B)
+            Zh = tf.add(tf.matmul(h, W), B)
+            # Ac = tf.nn.tanh(Zc)
+            # Ah = tf.nn.tanh(Zh)
+
+            return  tf.contrib.rnn.LSTMStateTuple(Zc, Zh), (W, B)
+
     def _log_in_tensorboard(self):
         tf.summary.scalar('loss', self.train_loss)
         return tf.summary.merge_all()
@@ -105,21 +129,16 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 second_encoder_outputs, second_state = self._build_rnn_encoder(
                     second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
 
-            c = tf.concat([first_state.c, second_state.c], axis = 1)
-            h = tf.concat([first_state.h, second_state.h], axis = 1)
-            state = tf.contrib.rnn.LSTMStateTuple(c, h)
-
-         
-            
-            # 3. Build out Cell ith attention
-            decoder_rnn_size = self.rnn_size + self.second_rnn_size
+            # 3. Concatenate the Vectors and Resize With Linear Layer
+            concat_size = self.rnn_size + self.second_rnn_size
             if self.bidirectional:
-                decoder_rnn_size = decoder_rnn_size * 2
-                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    (self.rnn_size + self.second_rnn_size) * 2, name="RNNencoder")
-            else:
-                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_rnn_size, name="RNNencoder")
+                concat_size = concat_size * 2
+            state, _ = self._concat_vectors(first_state, second_state, concat_size, self.rnn_size)
+
+            # 4. Build out Cell ith attention
+            decoder_rnn_size = self.rnn_size
+            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
+                    decoder_rnn_size, name="RNNdecoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
@@ -142,7 +161,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 attention_layer_size=self.rnn_size)
 
 
-            # 4. Build out helpers
+            # 5. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
                                                                    state, projection_layer, decoder_weights, 
                                                                    input_label_seq_length,
@@ -153,22 +172,22 @@ class DoubleEncoderBaseline(BasicRNNModel):
                                                                          self.word2idx[START_OF_TEXT_TOKEN],
                                                                          self.word2idx[END_OF_TEXT_TOKEN])
 
-            # 5. Define Train Loss
+            # 6. Define Train Loss
             train_logits = train_outputs.rnn_output
             train_loss = self._get_loss(
                 train_logits, input_label_sequence, input_label_seq_length)
             train_translate = train_outputs.sample_id
 
-            # 6. Define Translation
+            # 7. Define Translation
             inf_logits = inf_outputs.rnn_output
             inf_translate = inf_outputs.sample_id
             inf_loss = self._get_loss(
                 inf_logits, input_label_sequence, input_label_seq_length)
 
-            # 7. Do Updates
+            # 8. Do Updates
             update = self._do_updates(train_loss, self.learning_rate)
 
-            # 8. Save Variables to Model
+            # 9. Save Variables to Model
             self.input_data_sequence = input_data_sequence
             self.second_data_sequence = second_data_sequence
             self.input_label_sequence = input_label_sequence

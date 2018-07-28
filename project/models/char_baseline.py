@@ -95,10 +95,10 @@ class CharSeqBaseline(BasicRNNModel):
             if self.bidirectional:
                 decode_rnn_size = self.rnn_size * 2
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decode_rnn_size, name="RNNencoder")
+                    decode_rnn_size, name="RNNdecoder")
             else:
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decode_rnn_size, name="RNNencoder")
+                    decode_rnn_size, name="RNNdecoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(

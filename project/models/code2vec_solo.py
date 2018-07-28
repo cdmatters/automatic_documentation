@@ -125,7 +125,7 @@ class Code2VecSolo(Code2VecEncoder):
             decoder_rnn_size = self.code2vec_size
 
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_rnn_size, name="RNNencoder")
+                    decoder_rnn_size, name="RNNdecoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
@@ -235,8 +235,6 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
-
-
     LOGGER.warning("\n".join([str(v) for v in tf.trainable_variables()]))
 
     LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
@@ -258,7 +256,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     nn.main(sess, epochs, data_tuple, log_path, filewriters,
             test_check=test_freq, test_translate=test_translate)
 
-    print(sess.run([tf.get_variable('MLP_B'], feed_dict={}))
+    print(nn.get_scope_variable(sess, 'code2vec_vector', 'MLP_B'))
 
 
 

@@ -96,9 +96,19 @@ class BasicRNNModel(abc.ABC):
         return tf.summary.merge_all()
 
     @staticmethod
+    def _get_scope_variable(scope, var, shape=None):
+        with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
+            v = tf.get_variable(var, shape)
+        return v
+
+    def get_scope_variable(self, sess, scope, var):
+        return sess.run([self._get_scope_variable(scope, var)], feed_dict={})
+        
+
+    @staticmethod
     def _build_encode_decode_embeddings(input_data_sequence, char_weights,
                                         input_label_sequence, word_weights):
-        with tf.name_scope("embed_vars"):
+        with tf.variable_scope("embed_vars", reuse=tf.AUTO_REUSE):
             # 1. Embed Our "arg_names" char by char
             char_vocab_size, char_embed_size = char_weights.shape
             char_initializer = tf.constant_initializer(char_weights)
@@ -119,7 +129,7 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _build_bi_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob, name="RNNencoder"):
-        with tf.name_scope("encoder"):
+        with tf.variable_scope("encoder", reuse=tf.AUTO_REUSE):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell_fw = tf.contrib.rnn.BasicLSTMCell(
                 rnn_size, name=name)
@@ -155,7 +165,7 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _build_rnn_encoder(input_data_seq_length, rnn_size, encode_embedded, dropout_keep_prob, name="RNNencoder"):
-        with tf.name_scope("encoder"):
+        with tf.variable_scope("encoder", reuse=tf.AUTO_REUSE):
             batch_size = tf.shape(input_data_seq_length)
             encoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
                 rnn_size, name=name)
@@ -174,7 +184,7 @@ class BasicRNNModel(abc.ABC):
     @staticmethod
     def _build_rnn_training_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
                                     input_label_seq_length, decode_embedded, use_attention=True):
-        with tf.name_scope("training"):
+        with tf.variable_scope("training", reuse=tf.AUTO_REUSE):
             batch_size = tf.shape(state[0])[0]
 
             helper = tf.contrib.seq2seq.TrainingHelper(
@@ -195,7 +205,7 @@ class BasicRNNModel(abc.ABC):
     @staticmethod
     def _build_rnn_greedy_inference_decoder(decoder_rnn_cell, state, projection_layer, decoder_weights,
                                             start_tok, end_tok, use_attention=True):
-        with tf.name_scope("inference"):
+        with tf.variable_scope("inference", reuse=tf.AUTO_REUSE):
             batch_size = tf.shape(state[0])[0]
 
             helper = tf.contrib.seq2seq.GreedyEmbeddingHelper(decoder_weights,
@@ -216,7 +226,7 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _get_loss(logits, input_label_sequence, input_label_seq_length):
-        with tf.name_scope("loss"):
+        with tf.variable_scope("loss", reuse=tf.AUTO_REUSE):
             batch_size = tf.shape(input_label_sequence)[0]
             zero_col = tf.zeros([batch_size, 1], dtype=tf.int32)
 
@@ -238,7 +248,7 @@ class BasicRNNModel(abc.ABC):
 
     @staticmethod
     def _do_updates(train_loss, learning_rate):
-        with tf.name_scope("opt"):
+        with tf.variable_scope("opt", reuse=tf.AUTO_REUSE):
             # Clip the gradients
             max_gradient_norm = 1
             params = tf.trainable_variables()
@@ -402,6 +412,9 @@ class BasicRNNModel(abc.ABC):
             
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
+
+
+
 
 if __name__ == "__main__":
     print("ABSTRACT BASE CLASS")

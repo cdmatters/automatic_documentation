@@ -83,7 +83,7 @@ class Code2VecEncoder(BasicRNNModel):
     @staticmethod
     def _build_code2vec_encoder(input_codepaths, path_weights,
                                 target_var_variable, target_var_weights):
-        with tf.name_scope("code2vec_embeddings"):
+        with tf.variable_scope("code2vec_embed_vars", reuse=tf.AUTO_REUSE):
             # 1. Embed Our "codepath" as a whole sequence
             codepath_vocab_size, codepath_size = path_weights.shape
             path_initializer = tf.constant_initializer(path_weights)
@@ -104,6 +104,7 @@ class Code2VecEncoder(BasicRNNModel):
 
     @staticmethod
     def _concat_vectors(lstm_state, code2vec, concat_size, rnn_size):
+        with tf.variable_scope("code2vec_concat", reuse=tf.AUTO_REUSE):
             c = tf.concat([lstm_state.c, code2vec], axis = 1)
             h = tf.concat([lstm_state.h, code2vec], axis = 1)
 
@@ -126,7 +127,7 @@ class Code2VecEncoder(BasicRNNModel):
 
     @staticmethod
     def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size):
-        with tf.name_scope("code2vec_vector"):
+        with tf.variable_scope("code2vec_vector", reuse=tf.AUTO_REUSE):
             # 1. Concat Our Vector
             path_context = tf.concat([encode_path_embedded, encode_target_var_embedded], axis=2)
             
@@ -215,12 +216,9 @@ class Code2VecEncoder(BasicRNNModel):
 
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size
-            if self.bidirectional:
-                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_rnn_size, name="RNNencoder")
-            else:
-                decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
-                    decoder_rnn_size, name="RNNencoder")
+            
+            decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
+                    decoder_rnn_size, name="RNNdecoder")
 
             desc_vocab_size, _ = self.word_weights.shape
             projection_layer = layers_core.Dense(
