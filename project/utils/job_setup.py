@@ -36,14 +36,14 @@ def main(_):
 
     hyperparameters_space = dict(
         char_seq=[600],
-        vocab_size=[50000],
+        vocab_size=[40000],
         char_embed=[100],
         desc_embed=[100],
         batch_size=[128],
         lstm_size=[128],
-        bidirectional=[True],
-        dropout=[0.4],
-        tokenizer=['var_only', 'var_funcname', 'var_otherargs', 'var_funcname_otherargs'],
+        bidirectional=[1],
+        dropout=[0.3],
+        tokenizer=['var_only'],
         name=['bidirect'],
         save_every=[-1],
         logdir=[log_path]
