@@ -40,6 +40,8 @@ def run_model_startup_log(summary, log_path):
     LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
     LOGGER.multiline_info(summary)
     LOGGER.multiline_info("\n".join([str(v) for v in tf.trainable_variables()]))
+    LOGGER.debug("---------------------------------------------")
+
 
 def get_filewriters(logpath, session):
     return {
@@ -65,6 +67,7 @@ def log_std_out(e, i, eval_tuple, valid_eval_tuple, test_eval_tuple):
     LOGGER.multiline_debug(train_log)
     LOGGER.multiline_debug(valid_log)
     LOGGER.multiline_info(summary)
+
 
 
 def setup_logger(log_path):

@@ -366,6 +366,7 @@ class BasicRNNModel(abc.ABC):
         return bleu_tuple, av_loss, translations[:max_translations]
     
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0, initial_step=0):
+        LOGGER.debug("Starting Main...")
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
