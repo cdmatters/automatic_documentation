@@ -1,6 +1,7 @@
-
 import abc
 from collections import namedtuple
+import logging
+
 
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import numpy as np
@@ -8,6 +9,10 @@ import tensorflow as tf
 
 from project.external.nmt import bleu
 from project.utils.tokenize import START_OF_TEXT_TOKEN
+import project.utils.logging as log_util
+import project.utils.saveload as saveload
+
+LOGGER = logging.getLogger('')
 
 
 EXPERIMENT_SUMMARY_STRING = '''
@@ -71,8 +76,7 @@ class BasicRNNModel(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def main(self, session, epochs, train_data, filewriters, test_data=None, test_check=20, test_translate=0):
-        '''Run an experiment'''
+    def build_translations(self, all_names, all_references, all_tokenized, all_translations, all_data):
         pass
 
     @abc.abstractmethod
@@ -331,6 +335,10 @@ class BasicRNNModel(abc.ABC):
                 i, do_join=False, prepend_tok=self.word2idx[START_OF_TEXT_TOKEN])[1:-1] for i in inference_ids]
 
 
+            for t in all_translations:
+                if t == []:
+                    LOGGER.warning("EMPTY TRANSLATION")
+                    t.append("")
 
             all_training_loss.append(train_loss)
             all_names.extend(names)
@@ -349,38 +357,51 @@ class BasicRNNModel(abc.ABC):
 
         translations = self.build_translations(all_names, all_references, all_references_tok, all_translations, restricted_data)
         return bleu_tuple, av_loss, translations[:max_translations]
+    
+    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
+        epoch = 0
+        try:
+            recent_losses = [1e8] * 50  # should use a queue
+            for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
+                ops = [self.update, self.train_loss,
+                       self.train_id, self.merged_metrics]
+                _,  _, train_id, train_summary = self._feed_fwd(
+                    session, minibatch, ops, 'TRAIN')
+                filewriters["train_continuous"].add_summary(train_summary, i)
 
-@abc.abstractmethod
-def build_translations(self, all_names, all_references, all_tokenized, all_translations, all_data):
-    pass
+                if epoch != e:
+                    epoch = e
+                    evaluation_tuple = self.evaluate_bleu(
+                        session, data_tuple.train, max_points=5000)
+                    log_util.log_tensorboard(
+                        filewriters['train'], i, *evaluation_tuple)
 
-def argparse_basic_wrap(parser):
-    parser.add_argument('--epochs', '-e', dest='epochs', action='store',
-                        type=int, default=5000,
-                        help='minibatch size for model')
-    parser.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                        type=int, default=50000,
-                        help='size of embedding vocab')
-    parser.add_argument('--char-seq', '-c', dest='char_seq', action='store',
-                        type=int, default=24,
-                        help='max char sequence length')
-    parser.add_argument('--desc-seq', '-d', dest='desc_seq', action='store',
-                        type=int, default=120,
-                        help='max desecription sequence length')
-    parser.add_argument('--test-freq', '-t', dest='test_freq', action='store',
-                        type=int, default=100,
-                        help='how often to run a test and dump output')
-    parser.add_argument('--dump-translation', '-D', dest='test_translate', action='store',
-                        type=int, default=5,
-                        help='dump extensive test information on each test batch')
-    parser.add_argument('--use-full-dataset', '-F', dest='use_full_dataset', action='store_true',
-                        default=False,
-                        help='dump extensive test information on each test batch')
-    parser.add_argument('--logdir', '-L', dest='logdir', action='store',
-                        type=str, default='logdir',
-                        help='directory for storing logs and raw experiment runs')
-    return parser
+                    valid_evaluation_tuple = self.evaluate_bleu(
+                        session, data_tuple.valid, max_points=5000)
+                    log_util.log_tensorboard(
+                        filewriters['valid'], i, *valid_evaluation_tuple)
 
+                    test_evaluation_tuple = ((-1,), -1, "--") 
+                    # test_evaluation_tuple = self.evaluate_bleu(
+                    #     session, data_tuple.test, max_points=10000)
+                    # log_util.log_tensorboard(
+                    #     filewriters['test'], i, *test_evaluation_tuple)
+
+                    log_util.log_std_out(
+                        e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
+
+                    if i > 0:
+                        saveload.save(session, log_dir, self.name, i)
+
+                    recent_losses.append(valid_evaluation_tuple[-2])
+                    # if np.argmin(recent_losses) == 0:
+                    #     return
+                    # else:
+                    #     recent_losses.pop(0)
+            saveload.save(session, log_dir, self.name, i)
+            
+        except KeyboardInterrupt as e:
+            saveload.save(session, log_dir, self.name, i)
 
 if __name__ == "__main__":
     print("ABSTRACT BASE CLASS")

@@ -13,8 +13,7 @@ import project.utils.args as args
 import project.utils.logging as log_util
 import project.utils.saveload as saveload
 import project.utils.tokenize as tokenize
-from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
-    START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+from project.utils.tokenize import START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
 
 LOGGER = logging.getLogger('')
@@ -227,52 +226,6 @@ class Code2VecSolo(Code2VecEncoder):
 
         return session.run(run_ouputs, feed_dict=feed_dict)
 
-
-    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
-        epoch = 0
-        try:
-            recent_losses = [1e8] * 50  # should use a queue
-            for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
-                ops = [self.update, self.train_loss,
-                       self.train_id, self.merged_metrics]
-                _,  loss, train_id, train_summary = self._feed_fwd(
-                    session, minibatch, ops, 'TRAIN')
-                filewriters["train_continuous"].add_summary(train_summary, i)
-                
-                if epoch != e:
-                    epoch = e
-                    evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.train, max_points=5000)
-                    log_util.log_tensorboard(
-                        filewriters['train'], i, *evaluation_tuple)
-
-                    valid_evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.valid, max_points=5000)
-                    log_util.log_tensorboard(
-                        filewriters['valid'], i, *valid_evaluation_tuple)
-
-                    test_evaluation_tuple = ((-1,), -1, "--") 
-                    # test_evaluation_tuple = self.evaluate_bleu(
-                    #     session, data_tuple.test, max_points=10000)
-                    # log_util.log_tensorboard(
-                    #     filewriters['test'], i, *test_evaluation_tuple)
-
-                    log_util.log_std_out(
-                        e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
-
-                    if i > 0:
-                        saveload.save(session, log_dir, self.name, i)
-
-                    recent_losses.append(valid_evaluation_tuple[-2])
-                    # if np.argmin(recent_losses) == 0:
-                    #     return
-                    # else:
-                    #     recent_losses.pop(0)
-            saveload.save(session, log_dir, self.name, i)
-            
-        except KeyboardInterrupt as e:
-            saveload.save(session, log_dir, self.name, i)
-
 @args.code2vec_args
 @args.encoder_args
 @args.log_args
@@ -280,7 +233,7 @@ class Code2VecSolo(Code2VecEncoder):
 @args.data_args
 def _build_argparser():
     parser = argparse.ArgumentParser(
-        description='Run the basic LSTM model on the overfit dataset')
+        description='Run the code2vec model')
     return parser
 
 
@@ -304,7 +257,7 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     
     summary = ExperimentSummary(nn, vocab_size, char_seq, desc_seq, char_embed, desc_embed,
                                 use_full_dataset, use_split_dataset)
-
+    
     LOGGER.warning("\n./log_summary.sh -f {}/main.log # to follow\n".format(log_path))
     LOGGER.multiline_info(summary)
 

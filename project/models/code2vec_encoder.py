@@ -7,14 +7,12 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
-from project.external.nmt import bleu
 from project.models.base_model import BasicRNNModel, ExperimentSummary
 import project.utils.args as args
 import project.utils.logging as log_util
 import project.utils.saveload as saveload
 import project.utils.tokenize as tokenize
-from project.utils.tokenize import PAD_TOKEN, UNKNOWN_TOKEN, \
-    START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
+from project.utils.tokenize import START_OF_TEXT_TOKEN, END_OF_TEXT_TOKEN
 
 
 LOGGER = logging.getLogger('')
@@ -308,52 +306,6 @@ class Code2VecEncoder(BasicRNNModel):
             feed_dict[self.dropout_keep_prob] = 1 - self.dropout
 
         return session.run(run_ouputs, feed_dict=feed_dict)
-
-
-    def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0):
-        epoch = 0
-        try:
-            recent_losses = [1e8] * 50  # should use a queue
-            for i, (e, minibatch) in enumerate(self._to_batch(data_tuple.train, epochs)):
-                ops = [self.update, self.train_loss,
-                       self.train_id, self.merged_metrics]
-                _,  loss, train_id, train_summary = self._feed_fwd(
-                    session, minibatch, ops, 'TRAIN')
-                filewriters["train_continuous"].add_summary(train_summary, i)
-                
-                if epoch != e:
-                    epoch = e
-                    evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.train, max_points=5000)
-                    log_util.log_tensorboard(
-                        filewriters['train'], i, *evaluation_tuple)
-
-                    valid_evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.valid, max_points=5000)
-                    log_util.log_tensorboard(
-                        filewriters['valid'], i, *valid_evaluation_tuple)
-
-                    test_evaluation_tuple = ((-1,), -1, "--") 
-                    # test_evaluation_tuple = self.evaluate_bleu(
-                    #     session, data_tuple.test, max_points=10000)
-                    # log_util.log_tensorboard(
-                    #     filewriters['test'], i, *test_evaluation_tuple)
-
-                    log_util.log_std_out(
-                        e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
-
-                    if i > 0:
-                        saveload.save(session, log_dir, self.name, i)
-
-                    recent_losses.append(valid_evaluation_tuple[-2])
-                    # if np.argmin(recent_losses) == 0:
-                    #     return
-                    # else:
-                    #     recent_losses.pop(0)
-            saveload.save(session, log_dir, self.name, i)
-            
-        except KeyboardInterrupt as e:
-            saveload.save(session, log_dir, self.name, i)
 
 
 @args.code2vec_args
