@@ -32,6 +32,9 @@ def data_args(parse_fn):
         p.add_argument('--tokenizer', '-to', dest='tokenizer', action='store',
                        type=str, default='var_only',
                        help='the type of tokenizer to build the char_sequence: var_only, var_funcname')
+        p.add_argument('--code-tokenizer', '-ct', dest='code_tokenizer', action='store',
+                       type=str, default='code2vec',
+                       help='type of code tokenization "code2vec" or "full"')
 
         return p
     return wrapper

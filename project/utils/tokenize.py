@@ -303,7 +303,7 @@ def extract_model_data(data, fields, seq_lengths):
     return tuple(tensors + [translations])
 
 
-def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=False):
+def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=False):
     if use_full_dataset:
         if use_split_dataset:
             from project.data.preprocessed.split import split_quickload_data as q_data
@@ -333,7 +333,7 @@ def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=F
     else:
         from project.data.preprocessed.overfit import overfit_quickload_data as q_data
         from project.data.preprocessed.overfit import overfit_data as data
-    if use_quickload:
+    if use_code2vec_cache:
         return q_data()
     else:
         return data()
@@ -357,12 +357,12 @@ def choose_tokenizer(tokenizer):
     return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset, tokenizer='var_only', 
-                                   no_dups=0, code_tokenizer="code2vec", path_seq=10000, path_vocab=10000):
-    if code_tokenizer == "code2vec":
-        data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=True)
-    else:
-        data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_quickload=False)
+                                   use_full_dataset, use_split_dataset, tokenizer, 
+                                   no_dups, code_tokenizer, path_seq=10000, path_vocab=10000, **kwargs):
+    
+    c2v =  (code_tokenizer == "code2vec")
+    data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=c2v)
+
 
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
