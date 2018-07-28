@@ -105,6 +105,28 @@ class Code2VecEncoder(BasicRNNModel):
             return encode_path_embedded, encode_target_var_embedded, path_embedding, target_var_embedding
 
     @staticmethod
+    def _concat_vectors(lstm_state, code2vec, concat_size, rnn_size):
+            c = tf.concat([lstm_state.c, code2vec], axis = 1)
+            h = tf.concat([lstm_state.h, code2vec], axis = 1)
+
+            W = tf.get_variable("ConcatMLP_W", 
+                [concat_size, rnn_size],  
+                dtype=tf.float32,
+                initializer=tf.contrib.layers.xavier_initializer())
+            
+            B = tf.get_variable("ConcatMLP_B", 
+                [rnn_size],
+                dtype=tf.float32,
+                initializer=tf.contrib.layers.xavier_initializer())
+
+            Zc = tf.add(tf.matmul(c, W), B)
+            Zh = tf.add(tf.matmul(h, W), B)
+            # Ac = tf.nn.tanh(Zc)
+            # Ah = tf.nn.tanh(Zh)
+
+            return  tf.contrib.rnn.LSTMStateTuple(Zc, Zh), (W, B)
+
+    @staticmethod
     def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size):
         with tf.name_scope("code2vec_vector"):
             # 1. Concat Our Vector
@@ -186,14 +208,16 @@ class Code2VecEncoder(BasicRNNModel):
                 first_encoder_outputs, first_state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
 
-            c = tf.concat([first_state.c, code2vec_embedding], axis = 1)
-            h = tf.concat([first_state.h, code2vec_embedding], axis = 1)
-            state = tf.contrib.rnn.LSTMStateTuple(c, h)
+            if self.bidirectional:
+                concat_size = (self.rnn_size *2 ) + self.code2vec_size
+            else:
+                concat_size = self.rnn_size + self.code2vec_size
+                
+            state, comb_tuple = self._concat_vectors(first_state, code2vec_embedding, concat_size, self.rnn_size)
 
             # 3. Build out Cell ith attention
-            decoder_rnn_size = self.rnn_size + self.code2vec_size
+            decoder_rnn_size = self.rnn_size
             if self.bidirectional:
-                decoder_rnn_size = decoder_rnn_size + self.rnn_size
                 decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
                     decoder_rnn_size, name="RNNencoder")
             else:
@@ -254,6 +278,9 @@ class Code2VecEncoder(BasicRNNModel):
             self.update = update
             self.train_loss = train_loss
             self.train_id = train_translate
+
+            self.combination_W = comb_tuple[0]
+            self.combination_B = comb_tuple[1]
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
@@ -352,8 +379,6 @@ def _run_model(name, logdir, test_freq, test_translate, save_every,
     embed_tuple, data_tuple = tokenize.get_embed_tuple_and_data_tuple(
         vocab_size, char_seq, desc_seq, char_embed, desc_embed,
         use_full_dataset, use_split_dataset, tokenizer, no_dups, "code2vec", path_seq, path_vocab)
-    print(len(data_tuple))
-
 
 
     nn = Code2VecEncoder(embed_tuple, lstm_size, batch_size, lr, dropout, bidirectional, 
