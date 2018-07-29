@@ -87,10 +87,12 @@ class HashtableBaseline(object):
 
 
 def _run_model(**kwargs):
-    data_tuple = tokenize.get_data_tuple(kwargs['use_full_dataset'], kwargs['use_split_dataset'], kwargs['no_dups'])
+    data_tuple = tokenize.get_data_tuple(
+        kwargs['use_full_dataset'], kwargs['use_split_dataset'], kwargs['no_dups'], )
     print("Loading GloVe weights and word to index lookup table")
 
-    _, word2idx = tokenize.get_weights_word2idx(kwargs['desc_embed'], kwargs['vocab_size'], data_tuple.train)
+    _, word2idx = tokenize.get_weights_word2idx(
+        kwargs['desc_embed'], kwargs['vocab_size'], data_tuple.train)
     _ = defaultdict(int)
 
     this_tokenizer = tokenize.choose_tokenizer(kwargs['tokenizer'])
@@ -102,12 +104,15 @@ def _run_model(**kwargs):
     print(summary)
 
     results = []
+    model.train(train_data)
     for i in range(kwargs['n_times']):
         random.seed(i)
-        results.append(model.main(train_data, valid_data))
+
+        bleu = model.evaluate(model.test(valid_data))[0]*100
+        print(bleu)
+        results.append(bleu)
 
     print("{:.5f} +/- {:.5f}".format(np.mean(results), np.std(results)))
-
 
 
 @args.data_args
@@ -115,8 +120,8 @@ def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the non-neural hashtable baseline')
     parser.add_argument('--no-times', '-N', dest='n_times', action='store',
-                       type=int, default=10,
-                       help='no of times (print std dev & mean')
+                        type=int, default=10,
+                        help='no of times (print std dev & mean')
     return parser
 
 
