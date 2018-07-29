@@ -5,7 +5,7 @@ from nltk import word_tokenize
 import numpy as np
 from tqdm import tqdm
 
-from project.data.preprocessed import DataTuple
+from project.data.preprocessed import DataTuple, load_vocab
 
 PAD_TOKEN = '<PAD>'
 UNKNOWN_TOKEN = '<UNK>'
@@ -302,6 +302,36 @@ def extract_model_data(data, fields, seq_lengths):
     translations = extract_transations(data)
     return tuple(tensors + [translations])
 
+def get_idx2code2vec(use_full_dataset, use_split_dataset, no_dups):
+    subname = 'quickload'
+    if use_full_dataset:
+        if use_split_dataset:
+            name = 'split'
+        else:
+            if no_dups == 0:
+                name = 'unsplit'
+            elif no_dups == 1:
+                name = 'no_dups_1'
+            elif no_dups == 2:
+                name = 'no_dups_2'
+            elif no_dups == 3:
+                name = 'no_dups_3'
+            elif no_dups == 4:
+                name = 'no_dups_4'
+            elif no_dups == 5:
+                name = 'no_dups_5'
+            elif no_dups == 10:
+                name = 'no_dups_X'
+    else:
+        name = 'overfit'
+    path2idx_voc, _ = load_vocab(name, subname+'_paths')
+    tv2idx_voc, _ = load_vocab(name, subname+'_tvs')
+
+    idx2path = {v:k for k,v in path2idx_voc.items()}
+    idx2tv = {v:k for k,v in tv2idx_voc.items()}
+    idx2path[0] = "<NONE>"
+    idx2tv[0] = "<NONE>"
+    return idx2path, idx2tv
 
 def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=False):
     if use_full_dataset:

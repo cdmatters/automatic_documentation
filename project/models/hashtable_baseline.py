@@ -1,5 +1,5 @@
 import argparse
-from collections import defaultdict
+from collections import defaultdict, Counter
 import random
 
 random.seed(100)
@@ -16,14 +16,21 @@ def default_dict_factory(): return defaultdict(list)
 
 
 class HashtableBaseline(object):
-    def __init__(self, codepath_mode, model_name="Hashtable Model"):
+    def __init__(self, code_mode, idx2path=None, idx2tv=None, model_name="Hashtable Model"):
         self.name = model_name
-        self.codepath_mode = codepath_mode
+
+        self.code_only = ("code_only" in code_mode)
+        self.code_mode = code_mode.replace("code_only_", "")
         
         self.lookup_list = defaultdict(default_dict_factory)
-        self.codepath_lookup_list_hard = defaultdict(list)
         self.codepath_lookup_list_soft = defaultdict(default_dict_factory)
+        self.codepath_lookup_list_hard = defaultdict(list)
         
+        self.idx2path = idx2path
+        self.idx2tv = idx2tv
+        if self.code_mode == 'soft':
+            assert self.idx2path is not None and self.idx2tv is not None
+
         self.descriptions = []
 
 
@@ -35,11 +42,45 @@ class HashtableBaseline(object):
     def get_n_grams(self, n, name):
         return [name[i:i + n] for i in range(len(name) + 1 - n)]
 
-    def lookup_hard_codepaths(self, d):
+
+    def lookup_hard_codepaths(self, d, hardest=False):
         matches = []
         for p, tv in zip(d["path_idx"], d["target_var_idx"]):
             matches.extend(self.codepath_lookup_list_hard[(p,tv)])
-        return matches
+        if matches:
+            if hardest:
+                mc = Counter(matches).most_common()
+                top = mc[0][1]
+                return [m for m,c in mc if c == top]
+            else:
+                return matches
+        else:
+            all_d_indices = range(len(self.descriptions))
+            return [random.choice(all_d_indices)]
+
+
+    def lookup_soft_codepaths(self, d, softest=False):
+        matches = []
+        for p, tv in zip(d["path_idx"], d["target_var_idx"]):
+            path = tuple(self.idx2path[p] + self.idx2tv[tv])
+            for i in reversed(range(len(path))):
+                ngrams = self.get_n_grams(i + 1, path)
+                path_match = []
+                for n in ngrams:
+                    path_match.extend(self.codepath_lookup_list_soft[i][n])
+                if path_match:
+                    matches.append((path_match, len(n)))
+                    break
+
+        if matches:
+            if softest: # simply flatten
+                return [i for j, _ in matches for i in j]
+            else:
+                highest = max(matches, key= lambda x:x[1])[1]   
+                return [i for j, c in matches for i in j if c == highest] # flatten and filter 
+        else:  # not even 1-gram!
+            all_d_indices = range(len(self.descriptions))
+            return [random.choice(all_d_indices)]
 
     def lookup_description_indices(self, name):
         for i in reversed(range(len(name))):
@@ -62,12 +103,23 @@ class HashtableBaseline(object):
     def test(self, test_data):
         translations = []
         for d in test_data:
-            hash_string = tokenize.get_hash_string(d)
-            indices = self.lookup_description_indices(hash_string)
 
-            if self.codepath_mode == "hard":
+            hash_string = tokenize.get_hash_string(d)
+            if self.code_only:
+                indices = []
+            else:
+                indices = self.lookup_description_indices(hash_string)
+
+            if self.code_mode == "hard":
                 indices += self.lookup_hard_codepaths(d)
-                
+            if self.code_mode == "hardest":
+                indices += self.lookup_hard_codepaths(d, hardest=True)
+            
+            if self.code_mode == "soft":
+                indices += self.lookup_soft_codepaths(d)
+            if self.code_mode == "softest":
+                indices += self.lookup_soft_codepaths(d, softest=True)
+
             descriptions = [self.descriptions[i] for i in indices]
             translation = random.choice(descriptions)
 
@@ -86,11 +138,20 @@ class HashtableBaseline(object):
                 for n in ngrams:
                     self.lookup_list[j][n].append(i)
 
-            if self.codepath_mode == "hard":
+            if self.code_mode in ["hard", "hardest"]:
                 for p, tv in zip(d["path_idx"], d["target_var_idx"]):
                     if (p, tv) != (0, 0) and p != 1 and tv != 1:
                         self.codepath_lookup_list_hard[(p,tv)].append(i)
 
+            if self.code_mode in ["soft"]:
+                for p, tv in zip(d["path_idx"], d["target_var_idx"]):
+                    path = tuple(self.idx2path[p] + self.idx2tv[tv])
+                    l = len(path)
+                    for j in range(l):
+                        ngrams = self.get_n_grams(j + 1, path)
+                        for n in ngrams:
+                            self.codepath_lookup_list_soft[j][n].append(i)
+                          
 
     def evaluate(self, all_translations):
         references = [[t.description] for t in all_translations]
@@ -111,8 +172,17 @@ def _run_model(**kwargs):
     data_tuple = tokenize.get_data_tuple(
         kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
         kwargs['no_dups'], use_code2vec_cache=True)
-    print("Loading GloVe weights and word to index lookup table")
+    
+    if 'soft' in kwargs['code_mode']:
+        idx2path, idx2tv = tokenize.get_idx2code2vec(
+            kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
+            kwargs['no_dups'])
+        idx2path = {i: path.split(" ") for i, path in idx2path.items()}
+        idx2tv = {i: [tv]for i, tv in idx2tv.items()}
+    else:
+        idx2path, idx2tv = (None, None)
 
+    print("Loading GloVe weights and word to index lookup table")
     _, word2idx = tokenize.get_weights_word2idx(
         kwargs['desc_embed'], kwargs['vocab_size'], data_tuple.train)
     _ = defaultdict(int)
@@ -125,7 +195,7 @@ def _run_model(**kwargs):
     train_data = this_code_tokenizer(data_tuple.train, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
     valid_data = this_code_tokenizer(data_tuple.valid, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
 
-    model = HashtableBaseline(kwargs['codepath_mode'])
+    model = HashtableBaseline(kwargs['code_mode'], idx2path, idx2tv)
     summary = ArgumentSummary(model, kwargs)
     print(summary)
 
@@ -148,9 +218,10 @@ def _build_argparser():
     parser.add_argument('--no-times', '-N', dest='n_times', action='store',
                         type=int, default=10,
                         help='no of times (print std dev & mean')
-    parser.add_argument('--codepath_mode', '-cp', dest='codepath_mode', action='store',
+    parser.add_argument('--mode', '-m', dest='code_mode', action='store',
                         type=str, default="none",
                         help='how the baseline model matches code paths')
+
     return parser
 
 
