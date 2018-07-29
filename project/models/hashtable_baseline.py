@@ -16,10 +16,16 @@ def default_dict_factory(): return defaultdict(list)
 
 
 class HashtableBaseline(object):
-    def __init__(self, name="Hashtable Model"):
-        self.name = name
+    def __init__(self, codepath_mode, model_name="Hashtable Model"):
+        self.name = model_name
+        self.codepath_mode = codepath_mode
+        
         self.lookup_list = defaultdict(default_dict_factory)
+        self.codepath_lookup_list_hard = defaultdict(list)
+        self.codepath_lookup_list_soft = defaultdict(default_dict_factory)
+        
         self.descriptions = []
+
 
     def __str__(self):
         summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
@@ -28,6 +34,12 @@ class HashtableBaseline(object):
 
     def get_n_grams(self, n, name):
         return [name[i:i + n] for i in range(len(name) + 1 - n)]
+
+    def lookup_hard_codepaths(self, d):
+        matches = []
+        for p, tv in zip(d["path_idx"], d["target_var_idx"]):
+            matches.extend(self.codepath_lookup_list_hard[(p,tv)])
+        return matches
 
     def lookup_description_indices(self, name):
         for i in reversed(range(len(name))):
@@ -53,6 +65,9 @@ class HashtableBaseline(object):
             hash_string = tokenize.get_hash_string(d)
             indices = self.lookup_description_indices(hash_string)
 
+            if self.codepath_mode == "hard":
+                indices += self.lookup_hard_codepaths(d)
+                
             descriptions = [self.descriptions[i] for i in indices]
             translation = random.choice(descriptions)
 
@@ -71,6 +86,12 @@ class HashtableBaseline(object):
                 for n in ngrams:
                     self.lookup_list[j][n].append(i)
 
+            if self.codepath_mode == "hard":
+                for p, tv in zip(d["path_idx"], d["target_var_idx"]):
+                    if (p, tv) != (0, 0) and p != 1 and tv != 1:
+                        self.codepath_lookup_list_hard[(p,tv)].append(i)
+
+
     def evaluate(self, all_translations):
         references = [[t.description] for t in all_translations]
         translations = [t.translation for t in all_translations]
@@ -88,7 +109,8 @@ class HashtableBaseline(object):
 
 def _run_model(**kwargs):
     data_tuple = tokenize.get_data_tuple(
-        kwargs['use_full_dataset'], kwargs['use_split_dataset'], kwargs['no_dups'], )
+        kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
+        kwargs['no_dups'], use_code2vec_cache=True)
     print("Loading GloVe weights and word to index lookup table")
 
     _, word2idx = tokenize.get_weights_word2idx(
@@ -99,7 +121,11 @@ def _run_model(**kwargs):
     train_data = this_tokenizer(data_tuple.train, word2idx, _)
     valid_data = this_tokenizer(data_tuple.valid, word2idx, _)
 
-    model = HashtableBaseline()
+    this_code_tokenizer = tokenize.choose_code_tokenizer(kwargs["code_tokenizer"])
+    train_data = this_code_tokenizer(data_tuple.train, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
+    valid_data = this_code_tokenizer(data_tuple.valid, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
+
+    model = HashtableBaseline(kwargs['codepath_mode'])
     summary = ArgumentSummary(model, kwargs)
     print(summary)
 
@@ -114,14 +140,17 @@ def _run_model(**kwargs):
 
     print("{:.5f} +/- {:.5f}".format(np.mean(results), np.std(results)))
 
-
 @args.data_args
+@args.code2vec_args
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the non-neural hashtable baseline')
     parser.add_argument('--no-times', '-N', dest='n_times', action='store',
                         type=int, default=10,
                         help='no of times (print std dev & mean')
+    parser.add_argument('--codepath_mode', '-cp', dest='codepath_mode', action='store',
+                        type=str, default="none",
+                        help='how the baseline model matches code paths')
     return parser
 
 

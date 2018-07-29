@@ -343,6 +343,8 @@ def choose_code_tokenizer(tokenizer):
         tokenize = tokenize_src_all_basic_tokens
     if tokenizer == 'code2vec':
         tokenize = tokenize_code2vec
+    if tokenizer == 'no_code':
+        tokenize = lambda x, **kw: x
     return tokenize
 
 def choose_tokenizer(tokenizer):
