@@ -36,8 +36,9 @@ class HashtableBaseline(object):
 
     def __str__(self):
         summary_string = 'MODEL: {classname}\nName: {name}\n\n{summary}'
+        args = "code_mode: {}, code_only: {}".format(self.code_mode, self.code_only)
         return summary_string.format(
-            name=self.name, classname=self.__class__.__name__, summary="Args: no args")
+            name=self.name, classname=self.__class__.__name__, summary="Args: {}".format(args))
 
     def get_n_grams(self, n, name):
         return [name[i:i + n] for i in range(len(name) + 1 - n)]
@@ -173,14 +174,13 @@ def _run_model(**kwargs):
         kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
         kwargs['no_dups'], use_code2vec_cache=True)
     
-    if 'soft' in kwargs['code_mode']:
-        idx2path, idx2tv = tokenize.get_idx2code2vec(
+
+    idx2path, idx2tv = tokenize.get_idx2code2vec(
             kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
             kwargs['no_dups'])
-        idx2path = {i: path.split(" ") for i, path in idx2path.items()}
-        idx2tv = {i: [tv]for i, tv in idx2tv.items()}
-    else:
-        idx2path, idx2tv = (None, None)
+    idx2path = {i: path.split(" ") for i, path in idx2path.items()}
+    idx2tv = {i: [tv]for i, tv in idx2tv.items()}
+
 
     print("Loading GloVe weights and word to index lookup table")
     _, word2idx = tokenize.get_weights_word2idx(
@@ -195,20 +195,29 @@ def _run_model(**kwargs):
     train_data = this_code_tokenizer(data_tuple.train, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
     valid_data = this_code_tokenizer(data_tuple.valid, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
 
-    model = HashtableBaseline(kwargs['code_mode'], idx2path, idx2tv)
-    summary = ArgumentSummary(model, kwargs)
-    print(summary)
+    all_results = []
+    for mode in kwargs['code_mode']:
+        model = HashtableBaseline(mode, idx2path, idx2tv)
+        summary = ArgumentSummary(model, kwargs)
+        print(summary)
+    
+        results = []
+        model.train(train_data)
+        for i in range(kwargs['n_times']):
+            random.seed(i)
+    
+            bleu = model.evaluate(model.test(valid_data))[0]*100
+            print(bleu)
+            results.append(bleu)
+    
+        r = (np.mean(results), np.std(results))
+        print("----- {} -----".format(len(results)))
+        print("{:.5f} +/- {:.5f}".format(r[0], r[1]))
+        all_results.append((mode, r))
+    
+    for m, r in all_results:
+        print("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
 
-    results = []
-    model.train(train_data)
-    for i in range(kwargs['n_times']):
-        random.seed(i)
-
-        bleu = model.evaluate(model.test(valid_data))[0]*100
-        print(bleu)
-        results.append(bleu)
-
-    print("{:.5f} +/- {:.5f}".format(np.mean(results), np.std(results)))
 
 @args.data_args
 @args.code2vec_args
@@ -218,15 +227,15 @@ def _build_argparser():
     parser.add_argument('--no-times', '-N', dest='n_times', action='store',
                         type=int, default=10,
                         help='no of times (print std dev & mean')
-    parser.add_argument('--mode', '-m', dest='code_mode', action='store',
-                        type=str, default="none",
-                        help='how the baseline model matches code paths')
+    parser.add_argument('--modes', '-m', dest='code_mode', action='store',
+                        nargs='*', type=str, default=["none"],
+                        help='possible modes of hashtable lookup:  '
+                             '(code_only_+) [softest, soft, hard, hardest, none]')
 
     return parser
-
 
 if __name__ == "__main__":
     parser = _build_argparser()
     args = parser.parse_args()
-
     _run_model(**vars(args))
+
