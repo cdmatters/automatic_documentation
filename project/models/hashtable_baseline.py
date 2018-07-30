@@ -6,6 +6,7 @@ random.seed(100)
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import nltk
 import numpy as np
+from tqdm import tqdm
 
 from project.external.nmt import bleu
 from project.models.base_model import ArgumentSummary, SingleTranslation
@@ -103,7 +104,7 @@ class HashtableBaseline(object):
 
     def test(self, test_data):
         translations = []
-        for d in test_data:
+        for d in tqdm(test_data, leave=False):
 
             hash_string = tokenize.get_hash_string(d)
             if self.code_only:
@@ -129,7 +130,7 @@ class HashtableBaseline(object):
         return translations
 
     def train(self, train_data):
-        for i, d in enumerate(train_data):
+        for i, d in enumerate(tqdm(train_data, leave=False)):
             hash_string = tokenize.get_hash_string(d)
             l = len(hash_string)
             self.descriptions.append(d["arg_desc_tokens"])
@@ -168,8 +169,22 @@ class HashtableBaseline(object):
         print(bleu)
         return bleu
 
+def setup_log(**kwargs):
+    logfile = kwargs["logfile"]
+    if logfile is None:
+        return print
+    else:
+        def _log(*args):
+            str_args = [str(a) for a in args]
+            with open(logfile, 'a') as f:
+                f.write(*str_args)
+                f.write("\n")
+            print(*args)
+        return _log
+
 
 def _run_model(**kwargs):
+    LOG = setup_log(**kwargs)
     data_tuple = tokenize.get_data_tuple(
         kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
         kwargs['no_dups'], use_code2vec_cache=True)
@@ -182,7 +197,7 @@ def _run_model(**kwargs):
     idx2tv = {i: [tv]for i, tv in idx2tv.items()}
 
 
-    print("Loading GloVe weights and word to index lookup table")
+    LOG("Loading GloVe weights and word to index lookup table")
     _, word2idx = tokenize.get_weights_word2idx(
         kwargs['desc_embed'], kwargs['vocab_size'], data_tuple.train)
     _ = defaultdict(int)
@@ -195,11 +210,16 @@ def _run_model(**kwargs):
     train_data = this_code_tokenizer(data_tuple.train, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
     valid_data = this_code_tokenizer(data_tuple.valid, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
 
+    train_data = tokenize.trim_paths(data_tuple.train, kwargs["path_seq"])
+    valid_data = tokenize.trim_paths(data_tuple.valid, kwargs["path_seq"])
+    
+
+
     all_results = []
     for mode in kwargs['code_mode']:
         model = HashtableBaseline(mode, idx2path, idx2tv)
         summary = ArgumentSummary(model, kwargs)
-        print(summary)
+        LOG(summary)
     
         results = []
         model.train(train_data)
@@ -207,16 +227,16 @@ def _run_model(**kwargs):
             random.seed(i)
     
             bleu = model.evaluate(model.test(valid_data))[0]*100
-            print(bleu)
+            LOG(bleu)
             results.append(bleu)
     
         r = (np.mean(results), np.std(results))
-        print("----- {} -----".format(len(results)))
-        print("{:.5f} +/- {:.5f}".format(r[0], r[1]))
+        LOG("----- {} -----".format(len(results)))
+        LOG("{:.5f} +/- {:.5f}".format(r[0], r[1]))
         all_results.append((mode, r))
     
     for m, r in all_results:
-        print("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
+        LOG("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
 
 
 @args.data_args
@@ -231,7 +251,9 @@ def _build_argparser():
                         nargs='*', type=str, default=["none"],
                         help='possible modes of hashtable lookup:  '
                              '(code_only_+) [softest, soft, hard, hardest, none]')
-
+    parser.add_argument('--logfile', '-lf', dest='logfile', action='store',
+                        type=str, default=None,
+                        help='logfile to write to.')
     return parser
 
 if __name__ == "__main__":

@@ -281,6 +281,12 @@ def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
     
     return data
 
+def trim_paths(data, path_seq):
+    for d in data:
+        d['path_idx'] = d['path_idx'][:path_seq]
+        d['target_var_idx'] = d['target_var_idx'][:path_seq]
+    return data
+
 def extract_tensors(data, fields, seq_lengths):
     tensors = [[] for _ in fields]
     for d in data:
