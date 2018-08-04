@@ -31,6 +31,8 @@ def to_quickload(data):
             "arg_desc": d["arg_desc"],
             "path_idx": " ".join(str(n) for n in d["path_idx"]),
             "target_var_idx": " ".join(str(n) for n in d["target_var_idx"]),
+            "target_var_mask_idx": " ".join(str(n) for n in d["target_var_mask_idx"]),
+            "target_var_mask_names": " ".join(str(n) for n in d["target_var_mask_names"]),
             "name": d["name"],
             "args": d["args"],
             "pkg": d["pkg"]
@@ -46,17 +48,21 @@ def gen_code_vocab_files(data, name, subname):
         all_target_vars.extend(d["target_var_string"])
     count_paths = Counter(all_paths).most_common()
     count_vars = Counter(all_target_vars).most_common()
-    
+
     preprocessed.save_vocab(count_paths, name, subname+'_paths')
     preprocessed.save_vocab(count_vars, name, subname+'_tvs')
-    
+
 def tok_code_vocab_files(data, name, subname):
     voc2idx_path, voc2count_path = preprocessed.load_vocab(name, subname+'_paths')
     voc2idx_tv, voc2count_tv = preprocessed.load_vocab(name, subname+'_tvs')
 
     for d in data:
+        names = list(set(d["target_var_string"]))
+        name_dict = {n:i for i,n in enumerate(names)}
         d['path_idx'] = [voc2idx_path[p] if p in voc2idx_path else 0 for p in d["path_strings"] ]
         d['target_var_idx'] = [voc2idx_tv[p] if p in voc2idx_tv else 0 for p in d["target_var_string"]]
+        d['target_var_mask_idx'] = [name_dict[p] for p in d["target_var_string"]]
+        d['target_var_mask_names'] = names
     return data
 
 def save_quickload_version(data, name, test_percentage):
@@ -188,8 +194,35 @@ def prep_main_set(test_percentage):
     train_data = main_data[int(n * test_percentage):]
 
     preprocessed.save_data(train_data, test_data, 'unsplit')
-    save_quickload_version([main_data], 'unsplit', test_percentage)
- 
+    save_quickload_version([train_data, test_data], 'unsplit', test_percentage)
+
+
+def prep_no_dups_split(train_data, test_data):
+    for dups in [1,2,3,4,5,10]:
+        dups_str = str(dups) if dups != 10 else 'X'
+        filtered_train_data = []
+        filtered_test_data = []
+        c = Counter()
+        for d in train_data:
+            uniq_pair = d['arg_name']+'|'+ " ".join(nltk_tok(d['arg_desc']))
+            c.update({uniq_pair: 1})
+
+            if c[uniq_pair] <= dups:
+                filtered_train_data.append(d)
+
+        for d in test_data:
+            uniq_pair = d['arg_name']+'|'+ " ".join(nltk_tok(d['arg_desc']))
+            c.update({uniq_pair: 1})
+
+            if c[uniq_pair] <= dups:
+                filtered_test_data.append(d)
+
+        frac = len(filtered_test_data)/(len(filtered_train_data) + len(filtered_test_data))
+        print("Split No Dups{}: Train: {} Test and Valid: {},  Fraction:{}".format(
+            dups_str, len(filtered_train_data), len(filtered_test_data), frac))
+        preprocessed.save_data(filtered_train_data, filtered_test_data, 'no_dups_split_{}'.format(dups_str))
+        save_quickload_version([filtered_train_data, filtered_test_data], 'no_dups_split_{}'.format(dups_str), 0.0)
+
 
 def prep_no_duplicates(test_percentage):
     print("starting: prep_no_duplicates")
@@ -208,16 +241,16 @@ def prep_no_duplicates(test_percentage):
 
             if c[uniq_pair] <= dups:
                 filtered_data.append(d)
-    
+
         n = len(filtered_data)
         print("Total Data Size for NoDup{}: {}".format(dups_str, n))
         test_data = filtered_data[:int(n * test_percentage)]
         train_data = filtered_data[int(n * test_percentage):]
-    
+
 
         preprocessed.save_data(train_data, test_data, 'no_dups_{}'.format(dups_str))
         save_quickload_version([filtered_data], 'no_dups_{}'.format(dups_str), test_percentage)
-        
+
 def prep_overfit_set(test_percentage):
     '''Prepare a tiny dataset from the raw data, to test overfit.'''
     print("starting: prep_overfit_set")
@@ -239,7 +272,7 @@ def prep_overfit_set(test_percentage):
 
     preprocessed.save_data(train, test, 'overfit')
     save_quickload_version([overfit_data], 'overfit', test_percentage)
-    
+
 def prep_repo_split_set(test_percentage):
     '''Prepare a data set with training and test data from different repositories'''
     print("starting: prep_repo_split_set")
@@ -287,7 +320,8 @@ def prep_repo_split_set(test_percentage):
 
     preprocessed.save_data(train_data, test_data, 'split')
     save_quickload_version([train_data, test_data], 'split', test_percentage)
-    
+
+    prep_no_dups_split(train_data, test_data)
 
 
 
@@ -319,7 +353,7 @@ if __name__ == "__main__":
         assimilate_data()
         prep_main_set(0.3)
         prep_overfit_set(0.3)
-        prep_repo_split_set(0.3)
+        prep_repo_split_set(0.25)
         prep_no_duplicates(0.3)
     else:
         if args.assimilate:
@@ -329,7 +363,7 @@ if __name__ == "__main__":
         if args.overfit_set:
             prep_overfit_set(0.3)
         if args.sep_repos:
-            prep_repo_split_set(0.3)
+            prep_repo_split_set(0.25)
         if args.no_dups:
             prep_no_duplicates(0.3)
     if not any(vars(args).values()):
