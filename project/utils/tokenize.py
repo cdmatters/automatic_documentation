@@ -32,11 +32,11 @@ def get_hash_string(d):
         if l == SEPARATOR_1:
             hash_string.append("|")
         elif l == SEPARATOR_2:
-            hash_string.append("-")        
+            hash_string.append("-")
         elif l == SEPARATOR_3:
             hash_string.append("+")
         elif l == END_OF_TEXT_TOKEN:
-            hash_string.append("")    
+            hash_string.append("")
         else:
             hash_string.append(l)
     return "".join(hash_string)
@@ -74,18 +74,18 @@ def gen_train_vocab(train_data, embed_file, vocab_size):
     for d in train_data:
         all_toks.extend(nltk_tok(d['arg_desc']))
     most_common = Counter(all_toks).most_common()
-    
+
     vocab = []
     if os.path.isfile(embed_file + ".vocab"):
         with open(embed_file + ".vocab", 'r', encoding='utf-8') as f:
             file_voc = [line.strip() for line in f]
-        
+
     else:
         with open(embed_file, 'r', encoding='utf-8') as f:
             file_voc = [ line.split()[0] for line in f ]
         with open(embed_file + ".vocab", 'w', encoding='utf-8') as f:
             f.write("\n".join(file_voc))
-    
+
     for tok, count in most_common:
 
         if tok in file_voc and count > 4:
@@ -107,24 +107,24 @@ def get_weights_word2idx(desc_embed, vocab_size=100000, train_data=None):
 
     if train_data is not None:
         desired_vocab = gen_train_vocab(train_data, embed_file, vocab_size)
-        
+
 
     word2idx = {PAD_TOKEN: 0}
     weights = [np.random.randn(desc_embed)]
 
 
     with open(embed_file, "r", encoding='utf-8') as f:
-        i = 0 
+        i = 0
         for line in tqdm(f):
             values = line.split()
 
             word = values[0]
             if word in desired_vocab:
                 word_weights = np.array(values[1:]).astype(np.float32)
-                
+
                 word2idx[word] = i + 1
                 weights.append(word_weights)
-                
+
                 i += 1
 
             if i > vocab_size:
@@ -264,21 +264,63 @@ def tokenize_code2vec(data, path_vocab, **kwargs):
     for d in data:
         d["path_idx"] = np.fromstring(d["path_idx"], dtype=int, sep=" ")
         d["target_var_idx"] = np.fromstring(d["target_var_idx"], dtype=int, sep=" ")
-    
+
         d["path_idx"][d["path_idx"] > path_vocab] = 1
         d["target_var_idx"][d["target_var_idx"] > path_vocab] = 1
 
-    return data 
+    return data
+
+def tokenize_code2vec_mask_args(data, path_vocab, **kwargs):
+    for d in data:
+        arg_idx = {n: path_vocab + i for i, n in enumerate(d['args'])}
+
+        d["path_idx"] = np.fromstring(d["path_idx"], dtype=int, sep=" ")
+        d["target_var_idx"] = np.fromstring(d["target_var_idx"], dtype=int, sep=" ")
+
+        d["target_var_mask_idx"] = np.fromstring(d["target_var_mask_idx"], dtype=int, sep=" ")
+        d["target_var_mask_names"] = d["target_var_mask_names"].split(" ")
+
+        masked = []
+        for global_id, local_id in zip(d["target_var_idx"], d["target_var_mask_idx"]):
+            if d["target_var_mask_names"][local_id] in arg_idx:
+                masked.append(arg_idx[d["target_var_mask_names"][local_id]])
+            elif global_id > path_vocab:
+                masked.append(1)
+            else:
+                masked.append(global_id)
+
+
+        d["path_idx"][d["path_idx"] > path_vocab] = 1
+        d["target_var_idx"] = np.array(masked)
+
+    return data
+
+def tokenize_code2vec_mask_all(data, path_vocab, **kwargs):
+    for d in data:
+        arg_idx = {n: path_vocab + i for i, n in enumerate(d['args'])}
+
+        d["path_idx"] = np.fromstring(d["path_idx"], dtype=int, sep=" ")
+        d["target_var_idx"] = np.fromstring(d["target_var_mask_idx"], dtype=int, sep=" ")
+
+        d["path_idx"][d["path_idx"] > path_vocab] = 1
+        d["target_var_idx"][d["target_var_idx"] > path_vocab] = 1
+
+    return data
+
+def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
+    for i, d in enumerate(data):
+        unk_token = word2idx[UNKNOWN_TOKEN]
+        src_tok = nltk_tok(d['src'])
 
 
 def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
     for i, d in enumerate(data):
         unk_token = word2idx[UNKNOWN_TOKEN]
         src_tok = nltk_tok(d['src'])
-        
+
         d['src_tokens'] = [w if w in word2idx else UNKNOWN_TOKEN for w in src_tok]
         d['src_idx'] = [word2idx.get(t, unk_token) for t in src_tok]
-    
+
     return data
 
 def trim_paths(data, path_seq):
@@ -342,8 +384,27 @@ def get_idx2code2vec(use_full_dataset, use_split_dataset, no_dups):
 def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=False):
     if use_full_dataset:
         if use_split_dataset:
-            from project.data.preprocessed.split import split_quickload_data as q_data
-            from project.data.preprocessed.split import split_data as data
+            if no_dups == 0:
+                from project.data.preprocessed.split import split_quickload_data as q_data
+                from project.data.preprocessed.split import split_data as data
+            elif no_dups == 1:
+                from project.data.preprocessed.no_dups_split_1 import no_dups_split_1_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_1 import no_dups_split_1_data as data
+            elif no_dups == 2:
+                from project.data.preprocessed.no_dups_split_2 import no_dups_split_2_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_2 import no_dups_split_2_data as data
+            elif no_dups == 3:
+                from project.data.preprocessed.no_dups_split_3 import no_dups_split_3_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_3 import no_dups_split_3_data as data
+            elif no_dups == 4:
+                from project.data.preprocessed.no_dups_split_4 import no_dups_split_4_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_4 import no_dups_split_4_data as data
+            elif no_dups == 5:
+                from project.data.preprocessed.no_dups_split_5 import no_dups_split_5_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_5 import no_dups_split_5_data as data
+            elif no_dups == 10:
+                from project.data.preprocessed.no_dups_split_X import no_dups_split_X_quickload_data as q_data
+                from project.data.preprocessed.no_dups_split_X import no_dups_split_X_data as data
         else:
             if no_dups == 0:
                 from project.data.preprocessed.unsplit import unsplit_quickload_data as q_data
@@ -379,6 +440,10 @@ def choose_code_tokenizer(tokenizer):
         tokenize = tokenize_src_all_basic_tokens
     if tokenizer == 'code2vec':
         tokenize = tokenize_code2vec
+    if tokenizer == 'code2vec_mask_args':
+        tokenize = tokenize_code2vec_mask_args
+    if tokenizer == 'code2vec_mask_all':
+        tokenize = tokenize_code2vec_mask_all
     if tokenizer == 'no_code':
         tokenize = lambda x, **kw: x
     return tokenize
@@ -395,10 +460,10 @@ def choose_tokenizer(tokenizer):
     return tokenize
 
 def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
-                                   use_full_dataset, use_split_dataset, tokenizer, 
+                                   use_full_dataset, use_split_dataset, tokenizer,
                                    no_dups, code_tokenizer, path_seq=1000, path_vocab=1000, **_):
-    
-    c2v =  (code_tokenizer == "code2vec")
+
+    c2v =  ("code2vec" in code_tokenizer)
     data_tuple = get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_cache=c2v)
 
 
@@ -418,19 +483,19 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     train_data = code_tokenize(data_tuple.train, word2idx=word2idx, path_vocab=path_vocab)
     valid_data = code_tokenize(data_tuple.valid, word2idx=word2idx, path_vocab=path_vocab)
     test_data = code_tokenize(data_tuple.test, word2idx=word2idx, path_vocab=path_vocab)
-    
+
     print("Extracting tensors train and test")
-    
+
     fields = ["arg_name_idx", "arg_desc_idx"]
     seq_lengths = [char_seq, desc_seq]
 
-    if code_tokenizer == 'code2vec':
+    if 'code2vec' in code_tokenizer:
         fields.extend(["path_idx", "target_var_idx"])
         seq_lengths.extend([path_seq, path_seq])
     elif code_tokenizer == "full":
         fields.extend(["src_idx"])
         seq_lengths.extend([200])
-    
+
     train_data = extract_model_data(train_data, fields, seq_lengths)
     valid_data = extract_model_data(valid_data, fields, seq_lengths)
     test_data = extract_model_data(test_data, fields, seq_lengths)
@@ -445,9 +510,11 @@ if __name__ == '__main__':
     # data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
 
     data = get_embed_tuple_and_data_tuple(vocab_size=5000, char_seq=550, desc_seq=300,
-                                   char_embed=50, desc_embed=50,
-                                   use_full_dataset=True, use_split_dataset=False, tokenizer='var_funcname_otherargs')
+                                   char_embed=50, desc_embed=200,
+                                   use_full_dataset=False, use_split_dataset=False, tokenizer='var_only',
+                                   no_dups=0, code_tokenizer='code2vec_mask_all')
 
-    char_tensor = data[1].train[0]
-    print(np.max(char_tensor, axis=0))
+
+    char_tensor = data[1].train[3]
+    print(np.max(char_tensor))
     print(data[1].train[0].shape)

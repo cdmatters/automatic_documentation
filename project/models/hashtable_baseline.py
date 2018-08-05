@@ -1,5 +1,6 @@
 import argparse
 from collections import defaultdict, Counter
+import gc
 import random
 
 random.seed(100)
@@ -234,7 +235,8 @@ def _run_model(**kwargs):
         LOG("----- {} -----".format(len(results)))
         LOG("{:.5f} +/- {:.5f}".format(r[0], r[1]))
         all_results.append((mode, r))
-    
+        gc.collect()
+        
     for m, r in all_results:
         LOG("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
 

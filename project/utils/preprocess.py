@@ -32,7 +32,7 @@ def to_quickload(data):
             "path_idx": " ".join(str(n) for n in d["path_idx"]),
             "target_var_idx": " ".join(str(n) for n in d["target_var_idx"]),
             "target_var_mask_idx": " ".join(str(n) for n in d["target_var_mask_idx"]),
-            "target_var_mask_names": " ".join(str(n) for n in d["target_var_mask_names"]),
+            "target_var_mask_names": " ".join(str(n).replace(" ","<SPACE>") for n in d["target_var_mask_names"]),
             "name": d["name"],
             "args": d["args"],
             "pkg": d["pkg"]

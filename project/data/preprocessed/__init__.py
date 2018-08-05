@@ -85,7 +85,7 @@ def save_data(train_data, test_data, name, subname=None):
         import_stmt += '\n{}_data = lambda : load_data("{}", "{}")'.format(filename, name, filename)
 
     n = len(test_data)
-    frac = 0.3
+    frac = 0.333
     valid_data = test_data[:int(n * frac)]
     unseen_test_data = test_data[int(n * frac):]
 
