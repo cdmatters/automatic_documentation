@@ -23,7 +23,7 @@ SingleTranslationWithPaths.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTO
 
 class Code2VecSolo(Code2VecEncoder):
 
-    def __init__(self, embed_tuple, batch_size, learning_rate, 
+    def __init__(self, embed_tuple, batch_size, learning_rate,
                 dropout, vec_size, path_vocab, path_embed, path_seq, model_name="BasicModel", **_):
         BasicRNNModel.__init__(self, embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
@@ -43,10 +43,10 @@ class Code2VecSolo(Code2VecEncoder):
 
         self.inference_loss = None
         self.inference_id = None
-        
+
         self.path_seq = path_seq
         self.path_embed = path_embed
-        self.path_vocab = path_vocab
+        self.path_vocab = path_vocab + 50 # ARGS
         self.path_weights = np.random.uniform(
              low=-0.1, high=0.1, size=[self.path_vocab, self.path_embed])
         self.input_target_var_weights = np.random.uniform(
@@ -56,7 +56,7 @@ class Code2VecSolo(Code2VecEncoder):
         self.merged_metrics = self._log_in_tensorboard()
 
         LOGGER.debug("Init loaded")
-        
+
     def arg_summary(self):
         mod_args = "ModArgs: code2vec_size: {}, path_embed: {}, lr: {}, batch_size: {}, ".format(
             self.code2vec_size, self.path_embed, self.learning_rate, self.batch_size)
@@ -87,7 +87,7 @@ class Code2VecSolo(Code2VecEncoder):
             input_label_seq_length = tf.argmin(
                 input_label_sequence, axis=1, output_type=tf.int32) + 1
             dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
-            
+
             # CODE 2 VEC
             # # input_codepaths : [batch_size x max_codepaths]
             # # input_target_vars : [batch_size x max_codepaths]
@@ -95,7 +95,7 @@ class Code2VecSolo(Code2VecEncoder):
             input_target_vars = tf.placeholder(tf.int32, [None, None], "paths")
             # input_codepaths_seq_length = tf.argmin(
             #     input_codepaths, axis=1, output_type=tf.int32) + 1
-            
+
             # 1. Get Embeddings
             _, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
                 input_data_sequence, self.char_weights,
@@ -108,8 +108,8 @@ class Code2VecSolo(Code2VecEncoder):
 
             # 1.2 Build the Code2Vec Vector
             code2vec_embedding = self._build_code2vec_vector(
-                encode_path_embedded, 
-                encode_tv_embedded, 
+                encode_path_embedded,
+                encode_tv_embedded,
                 self.path_embed,
                 self.code2vec_size
                 )
@@ -138,7 +138,7 @@ class Code2VecSolo(Code2VecEncoder):
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
-                                                                   state, projection_layer, decoder_weights, 
+                                                                   state, projection_layer, decoder_weights,
                                                                    input_label_seq_length,
                                                                    decode_embedded,
                                                                    use_attention=False)
@@ -176,7 +176,7 @@ class Code2VecSolo(Code2VecEncoder):
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
-    
+
 
     def _feed_fwd(self, session, minibatch, operation, mode=None):
         """
@@ -193,7 +193,7 @@ class Code2VecSolo(Code2VecEncoder):
         run_ouputs = operation
         feed_dict = {self.input_data_sequence: input_data,
                      self.input_label_sequence: input_labels,
-                     self.input_codepaths: input_paths, 
+                     self.input_codepaths: input_paths,
                      self.input_target_vars: input_target_vars,
                       }
         if mode == 'TRAIN':

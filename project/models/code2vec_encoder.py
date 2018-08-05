@@ -22,7 +22,7 @@ SingleTranslationWithPaths.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTO
 
 class Code2VecEncoder(BasicRNNModel):
 
-    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate, 
+    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate,
                 dropout, bidirectional, vec_size, path_seq, path_vocab, path_embed, model_name="BasicModel", **_):
         super().__init__(embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
@@ -44,10 +44,10 @@ class Code2VecEncoder(BasicRNNModel):
 
         self.inference_loss = None
         self.inference_id = None
-        
+
         self.path_seq = path_seq
         self.path_embed = path_embed
-        self.path_vocab = path_vocab
+        self.path_vocab = path_vocab + 50 # FOR EXTRA ARGS
         self.path_weights = np.random.uniform(
              low=-0.1, high=0.1, size=[self.path_vocab, self.path_embed])
         self.input_target_var_weights = np.random.uniform(
@@ -57,12 +57,12 @@ class Code2VecEncoder(BasicRNNModel):
         self.merged_metrics = self._log_in_tensorboard()
 
         LOGGER.debug("Init loaded")
-        
+
     def arg_summary(self):
         mod_args = "ModArgs: rnn_size: {}, code2vec_size: {}, path_embed: {}, lr: {}, batch_size: {}, ".format(
             self.rnn_size, self.code2vec_size, self.path_embed, self.learning_rate, self.batch_size)
 
-        data_args = "\n".join(["DataArgs: vocab_size: {}, char_embed: {}, word_embed: {},", 
+        data_args = "\n".join(["DataArgs: vocab_size: {}, char_embed: {}, word_embed: {},",
                                "       dropout: {}, path_seq {}, path_vocab: {}"]).format(
             len(self.word2idx), self.char_weights.shape[1], self.word_weights.shape[1],
               self.dropout, self.path_seq, self.path_vocab)
@@ -105,12 +105,12 @@ class Code2VecEncoder(BasicRNNModel):
             c = tf.concat([lstm_state.c, code2vec], axis = 1)
             h = tf.concat([lstm_state.h, code2vec], axis = 1)
 
-            W = tf.get_variable("ConcatMLP_W", 
-                [concat_size, rnn_size],  
+            W = tf.get_variable("ConcatMLP_W",
+                [concat_size, rnn_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
-            
-            B = tf.get_variable("ConcatMLP_B", 
+
+            B = tf.get_variable("ConcatMLP_B",
                 [rnn_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
@@ -127,14 +127,14 @@ class Code2VecEncoder(BasicRNNModel):
         with tf.variable_scope("code2vec_vector", reuse=tf.AUTO_REUSE):
             # 1. Concat Our Vector
             path_context = tf.concat([encode_path_embedded, encode_target_var_embedded], axis=2)
-            
+
             path_context_size = 2 * dim
             # 2. Feed it through an MLP
-            W = tf.get_variable("MLP_W", 
-                [path_context_size, code2vec_size],  
+            W = tf.get_variable("MLP_W",
+                [path_context_size, code2vec_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
-            B = tf.get_variable("MLP_B", 
+            B = tf.get_variable("MLP_B",
                 [code2vec_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
@@ -142,8 +142,8 @@ class Code2VecEncoder(BasicRNNModel):
             Z = tf.add(tf.tensordot(path_context, W, axes=[[2], [0]]), B,  )
             A = tf.nn.tanh(Z)
             # 3. Add attention & Return the Vector
-            attention_param = tf.get_variable("attention", 
-                [code2vec_size],  
+            attention_param = tf.get_variable("attention",
+                [code2vec_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
 
@@ -169,7 +169,7 @@ class Code2VecEncoder(BasicRNNModel):
             input_label_seq_length = tf.argmin(
                 input_label_sequence, axis=1, output_type=tf.int32) + 1
             dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
-            
+
             # CODE 2 VEC
             # # input_codepaths : [batch_size x max_codepaths]
             # # input_target_vars : [batch_size x max_codepaths]
@@ -177,7 +177,7 @@ class Code2VecEncoder(BasicRNNModel):
             input_target_vars = tf.placeholder(tf.int32, [None, None], "paths")
             # input_codepaths_seq_length = tf.argmin(
             #     input_codepaths, axis=1, output_type=tf.int32) + 1
-            
+
             # 1. Get Embeddings
             encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
                 input_data_sequence, self.char_weights,
@@ -190,8 +190,8 @@ class Code2VecEncoder(BasicRNNModel):
 
             # 1.2 Build the Code2Vec Vector
             code2vec_embedding = self._build_code2vec_vector(
-                encode_path_embedded, 
-                encode_tv_embedded, 
+                encode_path_embedded,
+                encode_tv_embedded,
                 self.path_embed,
                 self.code2vec_size
                 )
@@ -208,12 +208,12 @@ class Code2VecEncoder(BasicRNNModel):
                 concat_size = (self.rnn_size *2 ) + self.code2vec_size
             else:
                 concat_size = self.rnn_size + self.code2vec_size
-                
+
             state, comb_tuple = self._concat_vectors(first_state, code2vec_embedding, concat_size, self.rnn_size)
 
             # 3. Build out Cell ith attention
             decoder_rnn_size = self.rnn_size
-            
+
             decoder_rnn_cell = tf.contrib.rnn.BasicLSTMCell(
                     decoder_rnn_size, name="RNNdecoder")
 
@@ -225,7 +225,7 @@ class Code2VecEncoder(BasicRNNModel):
                 decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
-            
+
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
                 input_keep_prob=dropout_keep_prob,
@@ -238,7 +238,7 @@ class Code2VecEncoder(BasicRNNModel):
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
-                                                                   state, projection_layer, decoder_weights, 
+                                                                   state, projection_layer, decoder_weights,
                                                                    input_label_seq_length,
                                                                    decode_embedded)
 
@@ -277,7 +277,7 @@ class Code2VecEncoder(BasicRNNModel):
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
-    
+
 
     def _feed_fwd(self, session, minibatch, operation, mode=None):
         """
@@ -294,7 +294,7 @@ class Code2VecEncoder(BasicRNNModel):
         run_ouputs = operation
         feed_dict = {self.input_data_sequence: input_data,
                      self.input_label_sequence: input_labels,
-                     self.input_codepaths: input_paths, 
+                     self.input_codepaths: input_paths,
                      self.input_target_vars: input_target_vars,
                       }
         if mode == 'TRAIN':
