@@ -60,7 +60,7 @@ def build_summary_log_string(e, i, train_eval_tuple, val_eval_tuple, test_eval_t
 def log_std_out(e, i, eval_tuple, valid_eval_tuple, test_eval_tuple):
     LOGGER.debug("---------------------------------------------")
     train_log = build_translation_log_string("TRAINING", *eval_tuple)
-    valid_log = build_translation_log_string("TEST", *valid_eval_tuple)
+    valid_log = build_translation_log_string("VAL", *valid_eval_tuple)
     summary = build_summary_log_string(
         e, i, eval_tuple, valid_eval_tuple, test_eval_tuple)
 
