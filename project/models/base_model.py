@@ -368,6 +368,7 @@ class BasicRNNModel(abc.ABC):
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0, initial_step=0):
         LOGGER.debug("Starting Main...")
         min_valid_cross_ent = 1e8
+        max_bleu = 0
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
@@ -407,7 +408,15 @@ class BasicRNNModel(abc.ABC):
                         min_valid_cross_ent = min(min_valid_cross_ent, valid_evaluation_tuple[-2])
                         if e % 10 != 0:
                             model = saveload.save(session, log_dir, self.name, i)
-                        saveload.backup_for_later(log_dir, model)
+                        saveload.backup_for_later(log_dir, model, 'best_cross_ent')
+
+                    if valid_evaluation_tuple[0][0] > max_bleu:
+                        max_bleu = max(max_bleu, valid_evaluation_tuple[0][0])
+                        if e % 10 != 0:
+                            model = saveload.save(session, log_dir, self.name, i)
+                        saveload.backup_for_later(log_dir, model, 'best_bleu')
+
+
 
 
 

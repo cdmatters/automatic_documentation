@@ -55,8 +55,8 @@ def load(session, logpath):
         SAVER = tf.train.Saver(max_to_keep=5)
     return SAVER.restore(session, ckpt), int(iteration)
 
-def backup_for_later(logpath, model):
-    dest_dir = '{}/best_cross_ent/'.format(logpath)
+def backup_for_later(logpath, model, directory):
+    dest_dir = '{}/{}/'.format(logpath, directory)
     if os.path.exists(dest_dir):
         shutil.rmtree(dest_dir)
     os.mkdir(dest_dir)
