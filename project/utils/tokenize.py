@@ -41,6 +41,19 @@ def get_hash_string(d):
             hash_string.append(l)
     return "".join(hash_string)
 
+def get_weights_char2idx_one_hot():
+    # Weights are random, 300d
+    arg_alphabet = CHAR_VOCAB
+
+    # ':' is a stop token
+    char2idx = {a: i+1 for i, a in enumerate(arg_alphabet)}
+    char2idx[SEPARATOR_1] = len(char2idx.keys())
+    char2idx[SEPARATOR_2] = len(char2idx.keys())
+    char2idx[SEPARATOR_3] = len(char2idx.keys())
+    char2idx[END_OF_TEXT_TOKEN] = len(char2idx.keys())
+
+    char_weights = np.eye(len(char2idx.keys())+1)
+    return (char_weights, char2idx)
 
 def get_weights_char2idx(char_embed):
     # Weights are random, 300d
@@ -471,6 +484,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
+    char_weights, char2idx = get_weights_char2idx_one_hot()
 
     input_tokenize = choose_tokenizer(tokenizer)
     print("Tokenizing the word descriptions and characters")
