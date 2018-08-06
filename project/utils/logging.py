@@ -48,7 +48,7 @@ def get_filewriters(logpath, session):
         'train_continuous':  tf.summary.FileWriter('{}/train_continuous'.format(logpath), session.graph),
         'train': tf.summary.FileWriter('{}/train'.format(logpath), session.graph),
         'valid': tf.summary.FileWriter('{}/valid'.format(logpath)),
-        # 'test': tf.summary.FileWriter('{}/test'.format(logpath))
+        'test': tf.summary.FileWriter('{}/test'.format(logpath))
     }
 
 

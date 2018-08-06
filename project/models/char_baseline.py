@@ -16,7 +16,7 @@ LOGGER = logging.getLogger('')
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate, 
+    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate,
                 dropout, bidirectional, model_name="BasicModel", **_):
         super().__init__(embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
@@ -113,11 +113,12 @@ class CharSeqBaseline(BasicRNNModel):
 
             decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
                 decoder_rnn_cell, attention_mechanism,
-                attention_layer_size=decode_rnn_size)
+                attention_layer_size=decode_rnn_size,
+                alignment_history=True)
 
             # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
-                                                                   state, projection_layer, decoder_weights, 
+                                                                   state, projection_layer, decoder_weights,
                                                                    input_label_seq_length,
                                                                    decode_embedded)
 

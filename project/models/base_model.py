@@ -21,7 +21,7 @@ ARGUMENT_SUMMARY_STRING = '''
 ------------------------------------------------------
 {nn}
 ------------------------------------------------------
-ARGS: 
+ARGS:
 {kwargs}
 ------------------------------------------------------
 ------------------------------------------------------
@@ -100,7 +100,7 @@ class BasicRNNModel(abc.ABC):
 
     def get_scope_variable(self, sess, scope, var):
         return sess.run([self._get_scope_variable(scope, var)], feed_dict={})
-        
+
 
     @staticmethod
     def _build_encode_decode_embeddings(input_data_sequence, char_weights,
@@ -142,7 +142,7 @@ class BasicRNNModel(abc.ABC):
                 rnn_size, name=name)
             initial_state_bk = encoder_rnn_cell_bk.zero_state(
                 batch_size, dtype=tf.float32)
-            
+
             encoder_rnn_cell_bk = tf.contrib.rnn.DropoutWrapper(encoder_rnn_cell_bk,
                                                              input_keep_prob=dropout_keep_prob,
                                                              output_keep_prob=dropout_keep_prob,
@@ -291,7 +291,7 @@ class BasicRNNModel(abc.ABC):
         return session.run(run_ouputs, feed_dict=feed_dict)
 
     def _to_batch(self, full_data, epochs=1, do_prog_bar=False):
-        # arg_name, arg_desc, arg_code = full_data 
+        # arg_name, arg_desc, arg_code = full_data
         # assert arg_name.shape[0] == arg_desc.shape[0]
         size = full_data[0].shape[0]
 
@@ -327,10 +327,10 @@ class BasicRNNModel(abc.ABC):
 
             # Translating quirks:
             #    names: RETURN: 'axis<END>' NOT 'a x i s <END>'
-            #    references: RETURN: [['this', 'reference']] 
+            #    references: RETURN: [['this', 'reference']]
             #                NOT: ['<START>', 'this', 'reference','<END>'],
             #                     because compute_bleu takes multiple references
-            #    translations: RETURN: ['this', 'translation'] 
+            #    translations: RETURN: ['this', 'translation']
             #                  NOT: ['this', 'translation', '<END>']
             arg_name, arg_desc, arg_desc_translate = minibatch[0], minibatch[1], minibatch[-1]
             names = [self.translate(i, lookup=self.idx2char).replace(
@@ -356,7 +356,7 @@ class BasicRNNModel(abc.ABC):
         # BLEU TUPLE = (bleu_score, precisions, bp, ratio, translation_length, reference_length)
         # To Do: Replace with NLTK:
         #         smoother = SmoothingFunction()
-        #         bleu_score = corpus_bleu(all_references, all_translations, 
+        #         bleu_score = corpus_bleu(all_references, all_translations,
         #                                  smoothing_function=smoother.method2)
         bleu_tuple = bleu.compute_bleu(
             all_references, all_translations, max_order=4, smooth=False)
@@ -364,9 +364,10 @@ class BasicRNNModel(abc.ABC):
 
         translations = self.build_translations(all_names, all_references, all_references_tok, all_translations, restricted_data)
         return bleu_tuple, av_loss, translations[:max_translations]
-    
+
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0, initial_step=0):
         LOGGER.debug("Starting Main...")
+        min_valid_cross_ent = 1e8
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
@@ -387,21 +388,28 @@ class BasicRNNModel(abc.ABC):
                         filewriters['train'], i, *evaluation_tuple)
 
                     valid_evaluation_tuple = self.evaluate_bleu(
-                        session, data_tuple.valid, max_points=5000)
+                        session, data_tuple.valid, max_points=10000)
                     log_util.log_tensorboard(
                         filewriters['valid'], i, *valid_evaluation_tuple)
 
-                    test_evaluation_tuple = ((-1,), -1, "--") 
-                    # test_evaluation_tuple = self.evaluate_bleu(
-                    #     session, data_tuple.test, max_points=10000)
-                    # log_util.log_tensorboard(
-                    #     filewriters['test'], i, *test_evaluation_tuple)
+                    test_evaluation_tuple = self.evaluate_bleu(
+                        session, data_tuple.test, max_points=10000)
+                    log_util.log_tensorboard(
+                        filewriters['test'], i, *test_evaluation_tuple)
 
                     log_util.log_std_out(
                         e, i, evaluation_tuple, valid_evaluation_tuple, test_evaluation_tuple)
 
                     if e % 10 == 0 and e > 0:
-                        saveload.save(session, log_dir, self.name, i)
+                        model = saveload.save(session, log_dir, self.name, i)
+
+                    if valid_evaluation_tuple[-2] < min_valid_cross_ent:
+                        min_valid_cross_ent = min(min_valid_cross_ent, valid_evaluation_tuple[-2])
+                        if e % 10 != 0:
+                            model = saveload.save(session, log_dir, self.name, i)
+                        saveload.backup_for_later(log_dir, model)
+
+
 
                     recent_losses.append(valid_evaluation_tuple[-2])
                     # if np.argmin(recent_losses) == 0:
@@ -409,7 +417,7 @@ class BasicRNNModel(abc.ABC):
                     # else:
                     #     recent_losses.pop(0)
             saveload.save(session, log_dir, self.name, i)
-            
+
         except KeyboardInterrupt as e:
             saveload.save(session, log_dir, self.name, i)
 
@@ -421,7 +429,7 @@ def _run_model(Model, **kwargs):
     if mode == "TRAIN":
         log_path = log_util.to_log_path(kwargs["logdir"], kwargs["name"])
         log_util.setup_logger(log_path)
-        
+
         kwargs['git'] = saveload.get_githash()
         saveload.save_args(log_path, kwargs)
     else:
@@ -430,29 +438,29 @@ def _run_model(Model, **kwargs):
         kwargs = saveload.load_args(log_path)
         log_util.setup_logger(log_path)
 
-    
+
     embed_tuple, data_tuple = get_embed_tuple_and_data_tuple(**kwargs)
     nn = Model(embed_tuple, **kwargs)
 
     summary = ArgumentSummary(nn, kwargs)
-    
+
     if mode != "RETURN":
         log_util.run_model_startup_log(summary, log_path)
-    
+
     init = tf.group(tf.global_variables_initializer(),
                     tf.local_variables_initializer())
-    
-    session_conf = tf.ConfigProto(intra_op_parallelism_threads=4, 
+
+    session_conf = tf.ConfigProto(intra_op_parallelism_threads=4,
                                   inter_op_parallelism_threads=4)
     sess = tf.Session(config=session_conf)
 
     saveload.setup_saver(kwargs["save_every"])
-    
+
     filewriters = log_util.get_filewriters(log_path, sess)
 
     if mode == "TRAIN":
         sess.run(init)
-        step = 0 
+        step = 0
     else:
         _, step = saveload.load(sess, log_path)
         LOGGER.warning("Loaded from {}: Global Step {}".format(log_path, step))
@@ -462,7 +470,7 @@ def _run_model(Model, **kwargs):
             test_check=kwargs["test_freq"], test_translate=kwargs["test_translate"],
             initial_step=step)
     elif mode == "RETURN":
-        return sess, nn, data_tuple, step 
+        return sess, nn, data_tuple, step
     else:
         assert False
 

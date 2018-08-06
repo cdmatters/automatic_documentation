@@ -3,7 +3,8 @@ import logging
 import tensorflow as tf
 import pickle
 import os
-
+import glob
+import shutil
 import subprocess
 
 LOGGER = logging.getLogger('')
@@ -54,6 +55,13 @@ def load(session, logpath):
         SAVER = tf.train.Saver(max_to_keep=5)
     return SAVER.restore(session, ckpt), int(iteration)
 
+def backup_for_later(logpath, model):
+    dest_dir = '{}/best_cross_ent/'.format(logpath)
+    if os.path.exists(dest_dir):
+        shutil.rmtree(dest_dir)
+    os.mkdir(dest_dir)
+    for filename in glob.glob(r'{}*'.format( model)):
+        shutil.copy(filename, dest_dir)
 
 def setup_saver(max_saves):
     global SAVER
