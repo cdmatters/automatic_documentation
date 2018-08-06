@@ -484,7 +484,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
     print("Creating char to index look up table")
     char_weights, char2idx = get_weights_char2idx(char_embed)
-    char_weights, char2idx = get_weights_char2idx_one_hot()
+    #char_weights, char2idx = get_weights_char2idx_one_hot()
 
     input_tokenize = choose_tokenizer(tokenizer)
     print("Tokenizing the word descriptions and characters")
