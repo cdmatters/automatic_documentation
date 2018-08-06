@@ -16,8 +16,8 @@ LOGGER = logging.getLogger('')
 
 class CharSeqBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate, 
-                dropout, bidirectional, model_name="BasicModel", **_):
+    def __init__(self, embed_tuple, lstm_size, batch_size, learning_rate,
+                dropout, bidirectional, use_attention,  model_name="BasicModel", **_):
         super().__init__(embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
 
@@ -26,6 +26,7 @@ class CharSeqBaseline(BasicRNNModel):
         self.rnn_size = lstm_size
         self.dropout = dropout
         self.bidirectional = bidirectional
+        self.use_attention = use_attention
 
         # Graph Variables (built later)
         self.input_data_sequence = None
@@ -111,20 +112,26 @@ class CharSeqBaseline(BasicRNNModel):
                 output_keep_prob=dropout_keep_prob,
                 state_keep_prob=dropout_keep_prob)
 
-            decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
-                decoder_rnn_cell, attention_mechanism,
-                attention_layer_size=decode_rnn_size)
+            if self.use_attention:
+                decoder_rnn_cell = tf.contrib.seq2seq.AttentionWrapper(
+                    decoder_rnn_cell, attention_mechanism,
+                    attention_layer_size=decode_rnn_size,
+                    alignment_history=True)
 
-            # 4. Build out helpers
+                # 4. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
-                                                                   state, projection_layer, decoder_weights, 
+                                                                   state, projection_layer, decoder_weights,
                                                                    input_label_seq_length,
-                                                                   decode_embedded)
+                                                                   decode_embedded,
+                                                                   self.use_attention,
+                                                                   )
 
             inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
                                                                          state, projection_layer, decoder_weights,
                                                                          self.word2idx[START_OF_TEXT_TOKEN],
-                                                                         self.word2idx[END_OF_TEXT_TOKEN])
+                                                                         self.word2idx[END_OF_TEXT_TOKEN],
+                                                                         self.use_attention,
+                                                                         )
 
             # 5. Define Train Loss
             train_logits = train_outputs.rnn_output
@@ -162,6 +169,9 @@ def run_model(**kwargs):
 def _build_argparser():
     parser = argparse.ArgumentParser(
         description='Run the basic LSTM model on the overfit dataset')
+
+    parser.add_argument('--use-no-attention' , dest='use_attention', action='store_false',
+                            help='use no attention')
     return parser
 
 if __name__ == "__main__":
