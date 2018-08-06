@@ -472,7 +472,7 @@ def choose_tokenizer(tokenizer):
         tokenize = tokenize_vars_funcname_other_args_and_descriptions
     return tokenize
 
-def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, desc_embed,
+def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, desc_embed,
                                    use_full_dataset, use_split_dataset, tokenizer,
                                    no_dups, code_tokenizer, path_seq=1000, path_vocab=1000, **_):
 
@@ -483,8 +483,8 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, char_embed, d
     print("Loading GloVe weights and word to index lookup table")
     word_weights, word2idx = get_weights_word2idx(desc_embed, vocab_size, data_tuple.train)
     print("Creating char to index look up table")
-    char_weights, char2idx = get_weights_char2idx(char_embed)
-    #char_weights, char2idx = get_weights_char2idx_one_hot()
+    #char_weights, char2idx = get_weights_char2idx(char_embed)
+    char_weights, char2idx = get_weights_char2idx_one_hot()
 
     input_tokenize = choose_tokenizer(tokenizer)
     print("Tokenizing the word descriptions and characters")
@@ -524,7 +524,7 @@ if __name__ == '__main__':
     # data = tokenize_vars_and_descriptions(DATA.test, word2idx, char2idx)
 
     data = get_embed_tuple_and_data_tuple(vocab_size=5000, char_seq=550, desc_seq=300,
-                                   char_embed=50, desc_embed=200,
+                                desc_embed=200,
                                    use_full_dataset=False, use_split_dataset=False, tokenizer='var_only',
                                    no_dups=0, code_tokenizer='code2vec_mask_all')
 
