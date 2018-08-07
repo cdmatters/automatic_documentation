@@ -23,11 +23,11 @@ class HashtableBaseline(object):
 
         self.code_only = ("code_only" in code_mode)
         self.code_mode = code_mode.replace("code_only_", "")
-        
+
         self.lookup_list = defaultdict(default_dict_factory)
         self.codepath_lookup_list_soft = defaultdict(default_dict_factory)
         self.codepath_lookup_list_hard = defaultdict(list)
-        
+
         self.idx2path = idx2path
         self.idx2tv = idx2tv
         if self.code_mode == 'soft':
@@ -79,8 +79,8 @@ class HashtableBaseline(object):
             if softest: # simply flatten
                 return [i for j, _ in matches for i in j]
             else:
-                highest = max(matches, key= lambda x:x[1])[1]   
-                return [i for j, c in matches for i in j if c == highest] # flatten and filter 
+                highest = max(matches, key= lambda x:x[1])[1]
+                return [i for j, c in matches for i in j if c == highest] # flatten and filter
         else:  # not even 1-gram!
             all_d_indices = range(len(self.descriptions))
             return [random.choice(all_d_indices)]
@@ -117,7 +117,7 @@ class HashtableBaseline(object):
                 indices += self.lookup_hard_codepaths(d)
             if self.code_mode == "hardest":
                 indices += self.lookup_hard_codepaths(d, hardest=True)
-            
+
             if self.code_mode == "soft":
                 indices += self.lookup_soft_codepaths(d)
             if self.code_mode == "softest":
@@ -154,7 +154,7 @@ class HashtableBaseline(object):
                         ngrams = self.get_n_grams(j + 1, path)
                         for n in ngrams:
                             self.codepath_lookup_list_soft[j][n].append(i)
-                          
+
 
     def evaluate(self, all_translations):
         references = [[t.description] for t in all_translations]
@@ -187,12 +187,12 @@ def setup_log(**kwargs):
 def _run_model(**kwargs):
     LOG = setup_log(**kwargs)
     data_tuple = tokenize.get_data_tuple(
-        kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
+        kwargs['use_full_dataset'], kwargs['use_split_dataset'],
         kwargs['no_dups'], use_code2vec_cache=True)
-    
+
 
     idx2path, idx2tv = tokenize.get_idx2code2vec(
-            kwargs['use_full_dataset'], kwargs['use_split_dataset'], 
+            kwargs['use_full_dataset'], kwargs['use_split_dataset'],
             kwargs['no_dups'])
     idx2path = {i: path.split(" ") for i, path in idx2path.items()}
     idx2tv = {i: [tv]for i, tv in idx2tv.items()}
@@ -206,14 +206,17 @@ def _run_model(**kwargs):
     this_tokenizer = tokenize.choose_tokenizer(kwargs['tokenizer'])
     train_data = this_tokenizer(data_tuple.train, word2idx, _)
     valid_data = this_tokenizer(data_tuple.valid, word2idx, _)
+    test_data = this_tokenizer(data_tuple.test, word2idx, _)
 
     this_code_tokenizer = tokenize.choose_code_tokenizer(kwargs["code_tokenizer"])
     train_data = this_code_tokenizer(data_tuple.train, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
     valid_data = this_code_tokenizer(data_tuple.valid, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
+    test_data = this_code_tokenizer(data_tuple.test, word2idx=word2idx, path_vocab=kwargs["path_vocab"])
 
     train_data = tokenize.trim_paths(data_tuple.train, kwargs["path_seq"])
     valid_data = tokenize.trim_paths(data_tuple.valid, kwargs["path_seq"])
-    
+    test_data = tokenize.trim_paths(data_tuple.test, kwargs["path_seq"])
+
 
 
     all_results = []
@@ -221,22 +224,30 @@ def _run_model(**kwargs):
         model = HashtableBaseline(mode, idx2path, idx2tv)
         summary = ArgumentSummary(model, kwargs)
         LOG(summary)
-    
+
         results = []
+        test_results = []
         model.train(train_data)
         for i in range(kwargs['n_times']):
             random.seed(i)
-    
+
             bleu = model.evaluate(model.test(valid_data))[0]*100
+            bleu_test = model.evaluate(model.test(test_data))[0]*100
             LOG(bleu)
             results.append(bleu)
-    
+            test_results.append(bleu_test)
+
         r = (np.mean(results), np.std(results))
+        r_test = (np.mean(test_results), np.std(test_results))
         LOG("----- {} -----".format(len(results)))
-        LOG("{:.5f} +/- {:.5f}".format(r[0], r[1]))
+        LOG("VALID  {:.5f} +/-  {:.5f}   TEST  {:.5f} +/-  {:.5f} ".format(
+            r[0], r[1], r_test[0], r_test[1]))
+        LOG("      & $ {:.5f} \pm  {:.5f} $ & $ {:.5f} \pm {:.5f} $ &".format(
+            r[0], r[1], r_test[0], r_test[1]))
+
         all_results.append((mode, r))
         gc.collect()
-        
+
     for m, r in all_results:
         LOG("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
 
