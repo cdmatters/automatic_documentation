@@ -103,6 +103,19 @@ class BasicRNNModel(abc.ABC):
 
 
     @staticmethod
+    def _build_encode_random_embeddings(input_data_sequence, code_weights):
+        with tf.variable_scope("embed_vars", reuse=tf.AUTO_REUSE):
+            # 1. Embed Our "arg_names" code by code
+            code_vocab_size, code_embed_size = code_weights.shape
+            code_initializer = tf.constant_initializer(code_weights)
+            code_embedding = tf.get_variable("code_embed", [code_vocab_size, code_embed_size],
+                                             initializer=code_initializer, trainable=True)
+            encode_embedded = tf.nn.embedding_lookup(
+                code_embedding, input_data_sequence)
+
+            return encode_embedded
+
+    @staticmethod
     def _build_encode_decode_embeddings(input_data_sequence, char_weights,
                                         input_label_sequence, word_weights):
         with tf.variable_scope("embed_vars", reuse=tf.AUTO_REUSE):

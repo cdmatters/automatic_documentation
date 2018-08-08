@@ -3,6 +3,7 @@ import argparse
 import logging
 from collections import namedtuple
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.layers import core as layers_core
 
@@ -47,7 +48,9 @@ class DoubleEncoderBaseline(BasicRNNModel):
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
 
-        self.idx2voc = None
+        self.idx2voc = Non
+        self.code_weights = np.random.uniform(
+                low=-0.1, high=0.1, size=[40003, 200])
 
         LOGGER.debug("Init loaded")
 
@@ -121,19 +124,22 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 input_data_sequence, self.char_weights,
                 input_label_sequence, self.word_weights)
 
+            # 1.5 Get Second Embeddings
+            second_encode_embedded, _build_encode_random_embeddings(second_data_seq_length, self.code_weights)
+
             # 2. Build out Encoder
             if self.bidirectional:
                 first_encoder_outputs, first_state = self._build_bi_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob, name="FirstRNN")
 
                 second_encoder_outputs, second_state = self._build_bi_rnn_encoder(
-                    second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
+                    second_data_seq_length, self.second_rnn_size, second_encode_embedded, dropout_keep_prob, name="SecondRNN")
 
             else:
                 first_encoder_outputs, first_state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
                 second_encoder_outputs, second_state = self._build_rnn_encoder(
-                    second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
+                    second_data_seq_length, self.second_rnn_size, second_encode_embedded, dropout_keep_prob, name="SecondRNN")
 
             # 3. Concatenate the Vectors and Resize With Linear Layer
             concat_size = self.rnn_size + self.second_rnn_size
