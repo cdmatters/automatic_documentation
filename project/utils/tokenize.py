@@ -326,7 +326,8 @@ def get_src_vocab(train_data, vocab_size):
         tok.extend(nltk_tok(d['src']))
 
     vocab = [UNKNOWN_TOKEN, SEPARATOR_1, SEPARATOR_2]
-    vocab.extend([c for c,_ in Counter(tok).most_common()[:vocab_size]])
+    vocab.extend([w for w, c in Counter(tok).most_common()[:vocab_size] if c > 4])
+    print("Length of code vocab: {}".format(len(vocab)))
     return vocab
 
 SRC_VOCAB = None # this so naughty

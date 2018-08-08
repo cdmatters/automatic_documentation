@@ -45,12 +45,13 @@ class DoubleEncoderBaseline(BasicRNNModel):
         self.inference_loss = None
         self.inference_id = None
 
+        self.code_weights = np.random.uniform(
+                low=-0.1, high=0.1, size=[40003, 100])
+
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
 
-        self.idx2voc = Non
-        self.code_weights = np.random.uniform(
-                low=-0.1, high=0.1, size=[40003, 200])
+        self.idx2voc = None
 
         LOGGER.debug("Init loaded")
 
@@ -125,7 +126,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 input_label_sequence, self.word_weights)
 
             # 1.5 Get Second Embeddings
-            second_encode_embedded, _build_encode_random_embeddings(second_data_seq_length, self.code_weights)
+            second_encode_embedded = self._build_encode_random_embeddings(second_data_seq_length, self.code_weights)
 
             # 2. Build out Encoder
             if self.bidirectional:
