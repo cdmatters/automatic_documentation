@@ -30,31 +30,32 @@ def to_cmd(model, **kwargs):
 def main(_):
     now = datetime.strftime(datetime.now(), '%d%m_%H%M%S')
 
-    model = 'char_baseline'
+    model = 'code2vec_solo'
     log_path = '/home/ehambro/EWEEZ/project/logs'
     qstat_logs = "/home/ehambro/EWEEZ/project/qstat_logs/{}".format(now)
 
     hyperparameters_space = dict(
         char_seq=[60],
         vocab_size=[40000],
-        char_embed=[70],
+        #char_embed=[70],
         desc_embed=[200],
         batch_size=[128],
         # CODE2VEC ONLY
-        #path_embed=[300],
-        #path_vocab=[15000],
-        #path_seq=[5000],
-        #code2vec_size=[300],
+        path_embed=[300],
+        path_vocab=[15000],
+        path_seq=[5000],
+        code2vec_size=[300],
 
         lstm_size=[300],
         bidirectional=[1],
 
-        no_dup=[1],
+        no_dup=[10],
         epochs=[100],
-        dropout=[0.1, 0.3, 0.5],
+        dropout=[0.0, 0.1, 0.3],
         tokenizer=['var_only'],
-        name=['lstm-size__hparam__'],
-        save_every=[5],
+        name=['c2vsolo_sweep'],
+        code_tokenizer=['code2vec'],
+        save_every=[3],
         logdir=[log_path]
     )
 

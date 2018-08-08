@@ -123,10 +123,12 @@ class Code2VecEncoder(BasicRNNModel):
             return  tf.contrib.rnn.LSTMStateTuple(Zc, Zh), (W, B)
 
     @staticmethod
-    def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size):
+    def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size, dropout_keep_prob):
         with tf.variable_scope("code2vec_vector", reuse=tf.AUTO_REUSE):
             # 1. Concat Our Vector
             path_context = tf.concat([encode_path_embedded, encode_target_var_embedded], axis=2)
+
+            path_context = tf.nn.dropout(path_context, dropout_keep_prob)
 
             path_context_size = 2 * dim
             # 2. Feed it through an MLP
@@ -141,6 +143,7 @@ class Code2VecEncoder(BasicRNNModel):
 
             Z = tf.add(tf.tensordot(path_context, W, axes=[[2], [0]]), B,  )
             A = tf.nn.tanh(Z)
+
             # 3. Add attention & Return the Vector
             attention_param = tf.get_variable("attention",
                 [code2vec_size],
@@ -193,7 +196,8 @@ class Code2VecEncoder(BasicRNNModel):
                 encode_path_embedded,
                 encode_tv_embedded,
                 self.path_embed,
-                self.code2vec_size
+                self.code2vec_size,
+                dropout_keep_prob
                 )
 
             # 2. Build out Encoder

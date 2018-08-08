@@ -111,7 +111,8 @@ class Code2VecSolo(Code2VecEncoder):
                 encode_path_embedded,
                 encode_tv_embedded,
                 self.path_embed,
-                self.code2vec_size
+                self.code2vec_size,
+                dropout_keep_prob
                 )
 
             c = code2vec_embedding

@@ -21,7 +21,7 @@ SingleTranslationWithCode.__str__ = lambda s: "ARGN: {}\nCODE: {}\nDESC: {}\nTOK
 
 class DoubleEncoderBaseline(BasicRNNModel):
 
-    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001, 
+    def __init__(self, embed_tuple, rnn_size=300, batch_size=128, learning_rate=0.001,
                 dropout=0.3, bidirectional=False, model_name="BasicModel", **_):
         super().__init__(embed_tuple, model_name)
         # To Do; all these args from config, to make saving model easier.
@@ -47,10 +47,19 @@ class DoubleEncoderBaseline(BasicRNNModel):
         self._build_train_graph()
         self.merged_metrics = self._log_in_tensorboard()
 
+        self.idx2voc = None
+
         LOGGER.debug("Init loaded")
 
+    def translate_code(self, code, do_join=False):
+        if self.idx2voc is None:
+            from project.utils.tokenize import SRC_VOCAB
+            self.idx2voc = {i:k for i,k in enumerate(SRC_VOCAB)}
+        print(len(self.idx2voc))
+        return self.translate(code, lookup=self.idx2voc)
+
     def build_translations(self, all_names, all_references, all_references_tok, all_translations, all_data):
-        return [SingleTranslationWithCode(n, r[0], t[0], tr, self.translate(s, do_join=False)) for n, r, t, tr, s in zip(
+        return [SingleTranslationWithCode(n, r[0], t[0], tr, self.translate_code(s, do_join=False)) for n, r, t, tr, s in zip(
             all_names, all_references, all_references_tok, all_translations, all_data[2])]
 
     def arg_summary(self):
@@ -68,12 +77,12 @@ class DoubleEncoderBaseline(BasicRNNModel):
             h = tf.concat([first_state.h, second_state.h], axis = 1)
 
 
-            W = tf.get_variable("ConcatMLP_W", 
-                [concat_size, rnn_size],  
+            W = tf.get_variable("ConcatMLP_W",
+                [concat_size, rnn_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
-            
-            B = tf.get_variable("ConcatMLP_B", 
+
+            B = tf.get_variable("ConcatMLP_B",
                 [rnn_size],
                 dtype=tf.float32,
                 initializer=tf.contrib.layers.xavier_initializer())
@@ -119,7 +128,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
 
                 second_encoder_outputs, second_state = self._build_bi_rnn_encoder(
                     second_data_seq_length, self.second_rnn_size, encode_embedded, dropout_keep_prob, name="SecondRNN")
-                
+
             else:
                 first_encoder_outputs, first_state = self._build_rnn_encoder(
                     input_data_seq_length, self.rnn_size, encode_embedded, dropout_keep_prob,  name="FirstRNN")
@@ -146,7 +155,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
                 decoder_rnn_size, first_encoder_outputs,
                 memory_sequence_length=input_data_seq_length,
                 name="LuongAttention1")
-            
+
             decoder_rnn_cell = tf.contrib.rnn.DropoutWrapper(
                 decoder_rnn_cell,
                 input_keep_prob=dropout_keep_prob,
@@ -160,7 +169,7 @@ class DoubleEncoderBaseline(BasicRNNModel):
 
             # 5. Build out helpers
             train_outputs, _, _ = self._build_rnn_training_decoder(decoder_rnn_cell,
-                                                                   state, projection_layer, decoder_weights, 
+                                                                   state, projection_layer, decoder_weights,
                                                                    input_label_seq_length,
                                                                    decode_embedded)
 

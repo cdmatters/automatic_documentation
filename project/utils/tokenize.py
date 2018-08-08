@@ -1,4 +1,4 @@
-from collections import namedtuple, Counter
+from collections import namedtuple, Counter, defaultdict
 import os
 
 from nltk import word_tokenize
@@ -320,11 +320,41 @@ def tokenize_code2vec_mask_all(data, path_vocab, **kwargs):
 
     return data
 
-def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
-    for i, d in enumerate(data):
-        unk_token = word2idx[UNKNOWN_TOKEN]
-        src_tok = nltk_tok(d['src'])
+def get_src_vocab(train_data, vocab_size):
+    tok = []
+    for d in train_data:
+        tok.extend(nltk_tok(d['src']))
 
+    vocab = [UNKNOWN_TOKEN, SEPARATOR_1, SEPARATOR_2]
+    vocab.extend([c for c,_ in Counter(tok).most_common()[:vocab_size]])
+    return vocab
+
+SRC_VOCAB = None # this so naughty
+def tokenize_src_to_neighbouring_tokens(data, word2idx, **kwargs):
+    context = 5
+    vocab_size = 40000
+
+    global SRC_VOCAB
+    if kwargs.get('is_train', None):
+        SRC_VOCAB = get_src_vocab(data, vocab_size)
+    vocab2idx = {k:i for i,k in enumerate(SRC_VOCAB)}
+
+    for i, d in enumerate(data):
+        unk_token = vocab2idx[UNKNOWN_TOKEN]
+        src_tok = nltk_tok(d['src'])
+        indices = [i for i, k in enumerate(src_tok) if k == d['arg_name']]
+
+        sequence = []
+        for i in indices:
+            sequence.extend(src_tok[i-context:i])
+            sequence.append(SEPARATOR_1)
+            sequence.extend(src_tok[i+1:i+context+1])
+            sequence.append(SEPARATOR_2)
+
+        d['src_tokens'] = [w if w in vocab2idx else UNKNOWN_TOKEN for w in sequence]
+        d['src_idx'] = [vocab2idx.get(t, unk_token) for t in sequence]
+
+    return data
 
 def tokenize_src_all_basic_tokens(data, word2idx, **kwargs):
     for i, d in enumerate(data):
@@ -450,7 +480,8 @@ def get_data_tuple(use_full_dataset, use_split_dataset, no_dups, use_code2vec_ca
 
 def choose_code_tokenizer(tokenizer):
     if tokenizer == 'full':
-        tokenize = tokenize_src_all_basic_tokens
+        tokenize = tokenize_src_to_neighbouring_tokens
+        #tokenize = tokenize_src_all_basic_tokens
     if tokenizer == 'code2vec':
         tokenize = tokenize_code2vec
     if tokenizer == 'code2vec_mask_args':
@@ -494,7 +525,7 @@ def get_embed_tuple_and_data_tuple(vocab_size, char_seq, desc_seq, desc_embed,
 
     code_tokenize = choose_code_tokenizer(code_tokenizer)
     print("Tokenizing the src code")
-    train_data = code_tokenize(data_tuple.train, word2idx=word2idx, path_vocab=path_vocab)
+    train_data = code_tokenize(data_tuple.train, word2idx=word2idx, path_vocab=path_vocab, is_train=True)
     valid_data = code_tokenize(data_tuple.valid, word2idx=word2idx, path_vocab=path_vocab)
     test_data = code_tokenize(data_tuple.test, word2idx=word2idx, path_vocab=path_vocab)
 
