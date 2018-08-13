@@ -1,7 +1,7 @@
 import abc
 from collections import namedtuple
 import logging
-
+import sys
 
 # from nltk.translate.bleu_score import corpus_bleu, SmoothingFunction
 import numpy as np
@@ -460,7 +460,7 @@ def _run_model(Model, **kwargs):
         kwargs = saveload.load_args(log_path)
         log_util.setup_logger(log_path)
 
-
+    LOGGER.info(" ".join(sys.argv))
     embed_tuple, data_tuple = get_embed_tuple_and_data_tuple(**kwargs)
     nn = Model(embed_tuple, **kwargs)
 
