@@ -389,7 +389,7 @@ class BasicRNNModel(abc.ABC):
         LOGGER.debug("Starting Main...")
         min_valid_cross_ent = 1e8
         max_bleu = 0
-        min_perplexity = 0
+        min_perplexity = 1e8
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
