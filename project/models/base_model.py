@@ -324,17 +324,24 @@ class BasicRNNModel(abc.ABC):
                 # arg_desc_batch = arg_desc[idx_start: idx_end]
                 yield e, tuple(mb_data)
 
+    def get_perplexity(self, all_loss, all_translations, all_batch_sizes):
+        losses = [a*b for a,b in zip(all_loss, all_batch_sizes)]
+        no_words = [1 + len(t[0]) for t in all_translations]
+        return np.exp(np.sum(losses)/np.sum(no_words))
+
+
     def evaluate_bleu(self, session, data, max_points=10000, max_translations=200):
         all_names = []
         all_references = []
         all_references_tok = []
         all_translations = []
         all_training_loss = []
+        all_mbs = []
 
         ops = [self.merged_metrics, self.train_loss, self.inference_id]
         restricted_data = tuple([d[:max_points] for d in data])
         for _, minibatch in self._to_batch(restricted_data):
-
+            all_mbs.append(len(minibatch[0]))
             metrics, train_loss, inference_ids = self._feed_fwd(
                 session, minibatch, ops)
 
@@ -374,14 +381,15 @@ class BasicRNNModel(abc.ABC):
         bleu_tuple = bleu.compute_bleu(
             all_references, all_translations, max_order=4, smooth=False)
         av_loss = np.mean(all_training_loss)
-
+        perplexity = self.get_perplexity(all_training_loss, all_references, all_mbs)
         translations = self.build_translations(all_names, all_references, all_references_tok, all_translations, restricted_data)
-        return bleu_tuple, av_loss, translations[:max_translations]
+        return bleu_tuple, av_loss, perplexity,  translations[:max_translations]
 
     def main(self, session, epochs, data_tuple,  log_dir, filewriters, test_check=20, test_translate=0, initial_step=0):
         LOGGER.debug("Starting Main...")
         min_valid_cross_ent = 1e8
         max_bleu = 0
+        min_perplexity = 0
         epoch = 0
         try:
             recent_losses = [1e8] * 50  # should use a queue
@@ -417,17 +425,28 @@ class BasicRNNModel(abc.ABC):
                     if e % 10 == 0 and e > 0:
                         model = saveload.save(session, log_dir, self.name, i)
 
-                    if valid_evaluation_tuple[-2] < min_valid_cross_ent:
-                        min_valid_cross_ent = min(min_valid_cross_ent, valid_evaluation_tuple[-2])
-                        if e % 10 != 0:
+                    not_saved = (e % 10 != 0 )
+                    if valid_evaluation_tuple[1] < min_valid_cross_ent:
+                        min_valid_cross_ent = min(min_valid_cross_ent, valid_evaluation_tuple[1])
+                        if not_saved:
                             model = saveload.save(session, log_dir, self.name, i)
+                            not_saved = False
                         saveload.backup_for_later(log_dir, model, 'best_cross_ent')
 
                     if valid_evaluation_tuple[0][0] > max_bleu:
                         max_bleu = max(max_bleu, valid_evaluation_tuple[0][0])
-                        if e % 10 != 0:
+                        if not_saved:
                             model = saveload.save(session, log_dir, self.name, i)
+                            not_saved = False
                         saveload.backup_for_later(log_dir, model, 'best_bleu')
+
+                    if valid_evaluation_tuple[2] < min_perplexity:
+                        min_perplexity = min(min_perplexity, valid_evaluation_tuple[2])
+                        if not_saved:
+                            model = saveload.save(session, log_dir, self.name, i)
+                            not_saved = False
+                        saveload.backup_for_later(log_dir, model, 'best_perp')
+
 
 
 

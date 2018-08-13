@@ -6,7 +6,7 @@ def data_args(parse_fn):
     def wrapper(*args, **kwds):
         p = parse_fn(*args, **kwds)
         p.add_argument('--vocab-size', '-v', dest='vocab_size', action='store',
-                       type=int, default=30000,
+                       type=int, default=40000,
                        help='size of embedding vocab')
         p.add_argument('--char-seq', '-c', dest='char_seq', action='store',
                        type=int, default=24,
@@ -57,7 +57,7 @@ def log_args(parse_fn):
                        type=int, default=5,
                        help='dump extensive test information on each test batch')
         p.add_argument('--save-every', '-E', dest='save_every', action='store',
-                       type=int, default=5,
+                       type=int, default=1,
                        help='how often to save every run')
         p.add_argument('--mode', '-M', dest='mode', action='store',
                        type=str, default="TRAIN",

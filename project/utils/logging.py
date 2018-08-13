@@ -7,6 +7,7 @@ import tensorflow as tf
 LOGGER = logging.getLogger('')
 
 SUMMARY_STR = u"""EPOCH: {} MINIB: {}, TRAIN_LOSS: {:5f}, VALID_LOSS: {:5f}, TEST_LOSS: {:5f},
+TRAIN_PERP: {:.5f}, VAL_PERP: {:.5f}, TEST_PERP: {:.5f}
 TRAIN_BLEU: {}
 VALID_BLEU: {}
 TEST_BLEU: {}"""
@@ -20,7 +21,7 @@ def scalar_to_summary(name, value):
     return tf.Summary(value=[tf.Summary.Value(tag=name, simple_value=value)])
 
 
-def log_tensorboard(filewriter, i, bleu_tuple, av_loss, translations):
+def log_tensorboard(filewriter, i, bleu_tuple, av_loss, perplexity, translations):
     s = scalar_to_summary("av_loss", av_loss)
     filewriter.add_summary(s, i)
 
@@ -28,9 +29,9 @@ def log_tensorboard(filewriter, i, bleu_tuple, av_loss, translations):
     filewriter.add_summary(b, i)
 
 
-def build_translation_log_string(prefix, bleu_tuple, loss, translations):
+def build_translation_log_string(prefix, bleu_tuple, loss, perplexity, translations):
     log = [
-        u"{}: Bleu:{}, Av Loss:".format(prefix, bleu_tuple[0] * 100, loss),
+            u"{}: Bleu:{}, Av Loss: {}: Perplexity: {}".format(prefix, bleu_tuple[0] * 100, perplexity, loss),
         u"\n--{}--\n".format(prefix[:3]).join(str(t) for t in translations),
         u'--------------------'
     ]
@@ -54,6 +55,7 @@ def get_filewriters(logpath, session):
 
 def build_summary_log_string(e, i, train_eval_tuple, val_eval_tuple, test_eval_tuple):
     return SUMMARY_STR.format(e, i, train_eval_tuple[1], val_eval_tuple[1], test_eval_tuple[1],
+                              train_eval_tuple[2], val_eval_tuple[2], test_eval_tuple[2],
                               train_eval_tuple[0][0] * 100, val_eval_tuple[0][0] * 100, test_eval_tuple[0][0] * 100)
 
 
