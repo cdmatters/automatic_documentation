@@ -123,7 +123,7 @@ class Code2VecEncoder(BasicRNNModel):
             return  tf.contrib.rnn.LSTMStateTuple(Zc, Zh), (W, B)
 
     @staticmethod
-    def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size, dropout_keep_prob):
+    def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size, dropout_keep_prob, encode_seq_length):
         with tf.variable_scope("code2vec_vector", reuse=tf.AUTO_REUSE):
             # 1. Concat Our Vector
             path_context = tf.concat([encode_path_embedded, encode_target_var_embedded], axis=2)
@@ -151,6 +151,10 @@ class Code2VecEncoder(BasicRNNModel):
                 initializer=tf.contrib.layers.xavier_initializer())
 
             attention_vector = tf.tensordot(A, attention_param, axes=[[2], [0]])
+
+            # Mask out of sequence
+            mask = (1.0 - tf.sequence_mask(encode_seq_length, tf.shape(encode_path_embedded)[1], dtype=tf.float32)) * (-1000.0)
+            attention_vector = attention_vector + mask
             attention_vector = tf.nn.softmax(attention_vector)
 
 
@@ -165,12 +169,12 @@ class Code2VecEncoder(BasicRNNModel):
             # # input_data_sequence : [batch_size x max_variable_length]
             input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
             input_data_seq_length = tf.argmin(
-                input_data_sequence, axis=1, output_type=tf.int32) + 1
+                input_data_sequence, axis=1, output_type=tf.int32)
 
             # # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
             input_label_seq_length = tf.argmin(
-                input_label_sequence, axis=1, output_type=tf.int32) + 1
+                input_label_sequence, axis=1, output_type=tf.int32)
             dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
 
             # CODE 2 VEC
@@ -178,8 +182,8 @@ class Code2VecEncoder(BasicRNNModel):
             # # input_target_vars : [batch_size x max_codepaths]
             input_codepaths = tf.placeholder(tf.int32, [None, None], "paths")
             input_target_vars = tf.placeholder(tf.int32, [None, None], "paths")
-            # input_codepaths_seq_length = tf.argmin(
-            #     input_codepaths, axis=1, output_type=tf.int32) + 1
+            input_codepaths_seq_length = tf.argmin(
+                 input_codepaths, axis=1, output_type=tf.int32)
 
             # 1. Get Embeddings
             encode_embedded, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
@@ -197,7 +201,8 @@ class Code2VecEncoder(BasicRNNModel):
                 encode_tv_embedded,
                 self.path_embed,
                 self.code2vec_size,
-                dropout_keep_prob
+                dropout_keep_prob,
+                input_codepaths_seq_length
                 )
 
             # 2. Build out Encoder

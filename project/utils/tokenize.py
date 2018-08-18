@@ -279,7 +279,9 @@ def tokenize_code2vec(data, path_vocab, **kwargs):
         d["target_var_idx"] = np.fromstring(d["target_var_idx"], dtype=int, sep=" ")
 
         d["path_idx"][d["path_idx"] > path_vocab] = 1
+        d["path_idx"][d["path_idx"] == 0] = 1
         d["target_var_idx"][d["target_var_idx"] > path_vocab] = 1
+        d["target_var_idx"][d["target_var_idx"] == 0] = 1
 
     return data
 
@@ -304,6 +306,7 @@ def tokenize_code2vec_mask_args(data, path_vocab, **kwargs):
 
 
         d["path_idx"][d["path_idx"] > path_vocab] = 1
+        d["path_idx"][d["path_idx"] == 0 ] = 1
         d["target_var_idx"] = np.array(masked)
 
     return data
@@ -316,7 +319,8 @@ def tokenize_code2vec_mask_all(data, path_vocab, **kwargs):
         d["target_var_idx"] = np.fromstring(d["target_var_mask_idx"], dtype=int, sep=" ")
 
         d["path_idx"][d["path_idx"] > path_vocab] = 1
-        d["target_var_idx"][d["target_var_idx"] > path_vocab] = 1
+        d["path_idx"][d["path_idx"] == 0 ] = 1
+        d["target_var_idx"][d["target_var_idx"] == 0 ] = 1
 
     return data
 
@@ -379,9 +383,9 @@ def extract_tensors(data, fields, seq_lengths):
         for t, f, s in zip(tensors, fields, seq_lengths):
             a = np.array(d[f])
             if len(d[f]) < s:
-                pad = np.pad(a, (0, s - len(d[f])), 'constant')
+                pad = np.pad(a, (0, s + 1 - len(d[f])), 'constant')
             else:
-                pad = a[:s]
+                pad = np.pad(a[:s], (0,  1), 'constant')
             # pad = [d[f][i] if i < len(d[f]) else 0 for i in range(s)]
             t.append(np.array(pad))
     return [np.stack(t) for t in tensors]

@@ -93,8 +93,8 @@ class Code2VecSolo(Code2VecEncoder):
             # # input_target_vars : [batch_size x max_codepaths]
             input_codepaths = tf.placeholder(tf.int32, [None, None], "paths")
             input_target_vars = tf.placeholder(tf.int32, [None, None], "paths")
-            # input_codepaths_seq_length = tf.argmin(
-            #     input_codepaths, axis=1, output_type=tf.int32) + 1
+            input_codepaths_seq_length = tf.argmin(
+                input_codepaths, axis=1, output_type=tf.int32)
 
             # 1. Get Embeddings
             _, decode_embedded, _, decoder_weights = self._build_encode_decode_embeddings(
@@ -112,7 +112,8 @@ class Code2VecSolo(Code2VecEncoder):
                 encode_tv_embedded,
                 self.path_embed,
                 self.code2vec_size,
-                dropout_keep_prob
+                dropout_keep_prob,
+                input_codepaths_seq_length
                 )
 
             c = code2vec_embedding
