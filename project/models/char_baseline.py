@@ -67,11 +67,11 @@ class CharSeqBaseline(BasicRNNModel):
             # # input_data_sequence : [batch_size x max_variable_length]
             input_data_sequence = tf.placeholder(tf.int32, [None, None], "arg_name")
             input_data_seq_length = tf.argmin(
-                input_data_sequence, axis=1, output_type=tf.int32) + 1
+                input_data_sequence, axis=1, output_type=tf.int32)
             # # input_label_sequence  : [batch_size x max_docstring_length]
             input_label_sequence = tf.placeholder(tf.int32, [None, None], "arg_desc")
             input_label_seq_length = tf.argmin(
-                input_label_sequence, axis=1, output_type=tf.int32) + 1
+                input_label_sequence, axis=1, output_type=tf.int32)
             dropout_keep_prob = tf.placeholder_with_default(1.0, shape=())
 
             # 1. Get Embeddings
