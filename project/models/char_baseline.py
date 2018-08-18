@@ -126,7 +126,7 @@ class CharSeqBaseline(BasicRNNModel):
                                                                    self.use_attention,
                                                                    )
 
-            inf_outputs, _, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
+            inf_outputs, inf_state, _ = self._build_rnn_greedy_inference_decoder(decoder_rnn_cell,
                                                                          state, projection_layer, decoder_weights,
                                                                          self.word2idx[START_OF_TEXT_TOKEN],
                                                                          self.word2idx[END_OF_TEXT_TOKEN],
@@ -158,6 +158,8 @@ class CharSeqBaseline(BasicRNNModel):
 
             self.inference_loss = inf_loss
             self.inference_id = inf_translate
+            self.inf_state = inf_state
+            self.inf_outputs = inf_outputs
 
 def run_model(**kwargs):
     return _run_model(CharSeqBaseline, **kwargs)

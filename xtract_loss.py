@@ -43,7 +43,7 @@ def get_runs(tvt, window):
     return all_train, all_valid, all_test
 
 if __name__=="__main__":
-    truncate = 100
+    truncate = 150
     window_runs = 7
 
     tvt = extract(sys.argv[1])
