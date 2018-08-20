@@ -6,7 +6,7 @@
 #$ -e /dev/null
 #$ -t 1-5
 #$ -l tmem=10G
-#$ -l h_rt=23:00:00
+#$ -l h_rt=20:00:00
 #$ -P gpu
 #$ -l gpu=1
 

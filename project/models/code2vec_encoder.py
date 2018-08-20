@@ -122,8 +122,7 @@ class Code2VecEncoder(BasicRNNModel):
 
             return  tf.contrib.rnn.LSTMStateTuple(Zc, Zh), (W, B)
 
-    @staticmethod
-    def _build_code2vec_vector(encode_path_embedded, encode_target_var_embedded, dim, code2vec_size, dropout_keep_prob, encode_seq_length):
+    def _build_code2vec_vector(self, encode_path_embedded, encode_target_var_embedded, dim, code2vec_size, dropout_keep_prob, encode_seq_length):
         with tf.variable_scope("code2vec_vector", reuse=tf.AUTO_REUSE):
             # 1. Concat Our Vector
             path_context = tf.concat([encode_path_embedded, encode_target_var_embedded], axis=2)
@@ -157,9 +156,12 @@ class Code2VecEncoder(BasicRNNModel):
             attention_vector = attention_vector + mask
             attention_vector = tf.nn.softmax(attention_vector)
 
-
             multiplied = tf.transpose(tf.multiply(tf.transpose(A, [2,0,1]), attention_vector), [1,2,0])
             code_vec = tf.reduce_sum(multiplied, axis=1)
+
+            self.code2vec = code_vec
+            self.attention_scores = attention_vector
+            self.Z = Z
 
             return code_vec
 
