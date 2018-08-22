@@ -66,6 +66,7 @@ class BasicRNNModel(abc.ABC):
         self.inference_loss = None
         self.inference_id = None
 
+        self._do_shuffle = True
 
     @abc.abstractmethod
     def _build_train_graph(self):
@@ -312,7 +313,8 @@ class BasicRNNModel(abc.ABC):
 
         for e in range(epochs):
             zipped = list(zip(*full_data))
-            np.random.shuffle(zipped)
+            if self._do_shuffle:
+                np.random.shuffle(zipped)
             shuffled = list(zip(*zipped))
 
             for i in range(batch_per_epoch):

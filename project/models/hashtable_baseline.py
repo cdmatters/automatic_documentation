@@ -1,5 +1,5 @@
 import argparse
-from collections import defaultdict, Counter
+from collections import defaultdict, Counter, namedtuple
 import gc
 import random
 
@@ -10,9 +10,12 @@ import numpy as np
 from tqdm import tqdm
 
 from project.external.nmt import bleu
-from project.models.base_model import ArgumentSummary, SingleTranslation
+from project.models.base_model import ArgumentSummary
 from project.utils import args, tokenize
 
+SingleTranslation = namedtuple("Translation", ['name', 'description', 'tokenized', 'translation', 'choices'])
+SingleTranslation.__str__ = lambda s: "ARGN: {}\nDESC: {}\nTOKN: {}\nINFR: {}\nCHOICES: {}".format(
+       s.name," ".join(s.description), " ".join(s.tokenized), " ".join(s.translation), s.choices)
 
 def default_dict_factory(): return defaultdict(list)
 
@@ -127,7 +130,7 @@ class HashtableBaseline(object):
             translation = random.choice(descriptions)
 
             translations.append(SingleTranslation(
-                hash_string, d["arg_desc_translate"], d["arg_desc_tokens"], translation))
+                hash_string, d["arg_desc_translate"], d["arg_desc_tokens"], translation, len(descriptions)))
         return translations
 
     def train(self, train_data):
@@ -250,6 +253,7 @@ def _run_model(**kwargs):
 
     for m, r in all_results:
         LOG("Mode: {},  Score {:.5f} +/- {:.5f}".format(m, r[0], r[1]))
+    return model, (train_data, valid_data, test_data)
 
 
 @args.data_args

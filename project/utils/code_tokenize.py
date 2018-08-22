@@ -20,7 +20,7 @@ def populate_codepath_point_worker(data_queue, error_queue, new_data_queue):
             paths_from_root = extract_paths_from_root(tree, [], defaultdict(list))
             codepaths = extract_paths_to_leaves(d['arg_name'], paths_from_root)
             # d["codepaths"] = codepaths
-            
+
             path_strings = []
             target_var_names = []
             for cp in codepaths:
@@ -29,7 +29,7 @@ def populate_codepath_point_worker(data_queue, error_queue, new_data_queue):
 
                 tv = cp.to_var
                 target_var_names.append(tv)
-                
+
             d["path_strings"] = path_strings
             d["target_var_string"] = target_var_names
             if codepaths:
@@ -52,7 +52,7 @@ def pop_queue_closure(our_list):
         while True:
             try:
                 item = q.get_nowait()
-            
+
                 return_list.append(item)
                 q.task_done()
             except queue.Empty:
@@ -68,31 +68,31 @@ def return_populated_codepath(data):
     data_queue = JoinableQueue()
     [data_queue.put_nowait((i,d)) for i, d in enumerate(data)]
 
-    
+
     num_worker_threads = min(20, cpu_count() - 2)
     jobs = []
-    
+
     print("Starting {} Processes".format(num_worker_threads))
     for _ in range(num_worker_threads - 1):
-        p = Process(target=populate_codepath_point_worker, 
+        p = Process(target=populate_codepath_point_worker,
                                     args=(data_queue, error_queue, new_data_queue))
         p.start()
         jobs.append(p)
-    
+
     func_lists = []
     for q, l in [(error_queue, error_list), (new_data_queue, new_data_list)]:
         func = pop_queue_closure(l)
         func_lists.append((func, q))
-    
+
     while len(error_list) + len(new_data_list) != len(data):
         print(len(error_list), len(new_data_list), len(data), end="\r")
         [func(q) for func, q in func_lists]
-    
+
     print(len(error_list), len(new_data_list), len(data), end="\r")
     [j.terminate() for j in jobs]
     print("Closed Processes")
 
-    return new_data_list 
+    return new_data_list
 
 def get_pure_src(d):
     src = clear_leading_indent(d['src'])
@@ -111,7 +111,7 @@ def clear_docstring(src, docstring):
     s_lines = src.split("\n")
 
     stripped = []
-    line_counter = 0 
+    line_counter = 0
     started_skipping = False
     seen_trip_quotes =False
     for i, s in enumerate(s_lines):
@@ -119,8 +119,8 @@ def clear_docstring(src, docstring):
             seen_trip_quotes=True
         if d_lines[0].strip() in s and not started_skipping and seen_trip_quotes:
             started_skipping = True
-            line_counter = 0 
-        
+            line_counter = 0
+
         if started_skipping:
             if line_counter >= len(d_lines):
                 stripped.append(s)
@@ -150,7 +150,7 @@ def clear_leading_indent(d):
             split[i] = split[i].strip()
         else:
             break
-    
+
     return "\n".join(split)
 
 
@@ -172,11 +172,11 @@ def ignore_connecting_path(connecting_path):
 
 def ignore_path(cpath, path):
     filtered_out = [
-        tuple(["ClassDef","FunctionDef", "arguments", "arg"]), 
-        tuple(["FunctionDef", "arguments", "arg"]), 
+        tuple(["ClassDef","FunctionDef", "arguments", "arg"]),
+        tuple(["FunctionDef", "arguments", "arg"]),
         tuple(["FunctionDef"])
     ]
-    
+
     banned_ending = ['keywords', 'keyword']
     path_tuple = tuple(p[0] for p in path)
     cpath_tuple = tuple(p[0] for p in cpath)
@@ -187,20 +187,20 @@ def ignore_path(cpath, path):
 def extract_paths_to_leaves(variable, pmap):
     core_paths = pmap[variable]
 
-    path_tuple_list = [] # [(varX, [path,(up), fromX, (up), toY,], varY)] 
+    path_tuple_list = [] # [(varX, [path,(up), fromX, (up), toY,], varY)]
     for other_var, other_var_paths in pmap.items():
         if other_var == variable:
             continue
         for path in other_var_paths:
             for cpath in core_paths:
-                if ignore_path(cpath, path): 
+                if ignore_path(cpath, path):
                     continue
                 connecting_path = extract_connecting_path(cpath, path)
                 if ignore_connecting_path(connecting_path):
                     continue
                 path_tuple_list.append(CodePath(variable, connecting_path, other_var))
     return path_tuple_list
-            
+
 def get_root_index(pathA, pathB):
     for i in range(len(pathA)):
         if i == len(pathB):
@@ -208,7 +208,7 @@ def get_root_index(pathA, pathB):
             break
         elif pathA[i] != pathB[i]:
             return i - 1
-    return i  
+    return i
 
 def extract_connecting_path(pathA, pathB):
     root = get_root_index(pathA, pathB)
@@ -224,7 +224,7 @@ def extract_connecting_path(pathA, pathB):
         final.append(DOWN)
         final.append(b)
     return final
-    
+
 
 
 def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
@@ -253,12 +253,12 @@ def extract_paths_from_root(node, path, pmap, accept_nonvar_terminals=False):
             pmap[field].append(path)
         elif field is not None:
             pmap[field].append(path)
-    return pmap 
+    return pmap
 
 
 if __name__== "__main__":
     from project.data.preprocessed.split import split_data as DATA
-    
+
     # return_populated_codepath(DATA.train)
     # return_populated_codepath(DATA.valid)
     x = DATA.test
@@ -273,7 +273,7 @@ if __name__== "__main__":
 
     # test = D[69]['src']
     # name = D[69]
-    
+
     # src = clear_leading_indent(test)
     # x = ast.parse(src)
     # docstring = ast.get_docstring(x.body[0], clean=True)
