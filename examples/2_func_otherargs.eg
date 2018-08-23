@@ -1,0 +1,51 @@
+NODUP_1
+
+ARGN: display_name<SEP-1>ResourceDescriptor<SEP-2>name<SEP-3>type_<SEP-3>description<SEP-3>labels<SEP-3><END>
+DESC: a concise name that might be displayed in user interfaces .
+TOKN: a concise name that might be displayed in user interfaces .
+INFR: the name of the service descriptor to check .
+
+ARGN: minval<SEP-1>make_biclusters<SEP-2>shape<SEP-3>n_clusters<SEP-3>noise<SEP-3>maxval<SEP-3>shuffle<SEP-3>random_state<SEP-3><END>
+DESC: minimum value of a bicluster .
+TOKN: minimum value of a <UNK> .
+INFR: the maximum value of the smallest .
+
+ARGN: s<SEP-1>is_locally_k_edge_connected<SEP-2>G<SEP-3>t<SEP-3>k<SEP-3><END>
+DESC: source node
+TOKN: source node
+INFR: a node in the graph .
+
+ARGN: encoding<SEP-1>read_edgelist<SEP-2>path<SEP-3>comments<SEP-3>delimiter<SEP-3>create_using<SEP-3>nodetype<SEP-3>data<SEP-3>edgetype<SEP-3><END>
+DESC: specify which encoding to use when reading file .
+TOKN: specify which encoding to use when reading file .
+INFR: if not specified , the path is not used in the mode .
+
+ARGN: checkpoint_dir<SEP-1>checkpoints_iterator<SEP-2>min_interval_secs<SEP-3>timeout<SEP-3>timeout_fn<SEP-3><END>
+DESC: the directory in which checkpoints are saved .
+TOKN: the directory in which checkpoints are saved .
+INFR: the directory containing checkpoints .
+
+ARGN: updates_collections<SEP-1>streaming_dynamic_auc<SEP-2>labels<SEP-3>predictions<SEP-3>curve<SEP-3>metrics_collections<SEP-3>name<SEP-3><END>
+DESC: an optional iterable of collections that ` update_op ` should be added to .
+TOKN: an optional <UNK> of collections that ` <UNK> ` should be added to .
+INFR: an optional list of collections that updates should be added to .
+
+ARGN: user_agent<SEP-1>Client<SEP-2>project<SEP-3>credentials<SEP-3><END>
+DESC: ( optional ) the user agent to be used with api request . defaults to : const : ` default_user_agent ` .
+TOKN: ( optional ) the user agent to be used with api request . defaults to : const : ` <UNK> ` .
+INFR: string , the audience <UNK> object to be applied to the api .
+
+ARGN: num_features_per_node<SEP-1>k_feature_routing_function<SEP-2>input_data<SEP-3>tree_parameters<SEP-3>tree_biases<SEP-3>layer_num<SEP-3>max_nodes<SEP-3>random_seed<SEP-3>
+DESC: an ` int ` .
+TOKN: an ` int ` .
+INFR: the total number of features .
+
+ARGN: nbins<SEP-1>threshold_yen<SEP-2>image<SEP-3><END>
+DESC: number of bins used to calculate histogram . this value is ignored for integer arrays .
+TOKN: number of bins used to calculate histogram . this value is ignored for integer arrays .
+INFR: number of bins to image .
+
+ARGN: kwargs<SEP-1>clustermap<SEP-2>data<SEP-3>pivot_kws<SEP-3>method<SEP-3>metric<SEP-3>z_score<SEP-3>standard_scale<SEP-3>figsize<SEP-3>cbar_kws<SEP-3>row_cluster<SEP-3>col_cluster<SEP-3>row_linka
+DESC: all other keyword arguments are passed to `` sns.heatmap ``
+TOKN: all other keyword arguments are passed to `` <UNK> ``
+INFR: other keyword arguments are passed through to `` <UNK> `` at draw time .
